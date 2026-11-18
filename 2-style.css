@@ -1,0 +1,274 @@
+/* ==================================================
+   YOKAI TOWN - hoja de estilos
+   Índice:
+     1. General y cabecera
+     2. El mapa (el pueblo visto desde arriba)
+     3. Casas y decoración
+     4. Personajes
+     5. Ficha del personaje
+     6. Día y noche
+     7. Móvil (pantallas pequeñas)
+   ================================================== */
+
+/* ---------- 1. GENERAL Y CABECERA ---------- */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #1d2b1f; /* verde muy oscuro, como el borde del bosque */
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100dvh;
+  padding: 8px;
+  gap: 8px;
+}
+
+#cabecera {
+  width: min(96vw, 900px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#cabecera h1 {
+  font-size: 1.4rem;
+}
+
+#reloj {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums; /* para que la hora no "salte" */
+}
+
+/* ---------- 2. EL MAPA ---------- */
+
+#mapa {
+  position: relative;             /* todo lo de dentro se coloca respecto al mapa */
+  width: min(96vw, 900px);
+  aspect-ratio: 3 / 2;            /* en pantallas anchas el pueblo es panorámico */
+  border-radius: 12px;
+  overflow: hidden;               /* nada se sale del mapa */
+  background: linear-gradient(#7cb356, #5d9b41); /* césped */
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* El filtro oscuro que hace la noche (app.js cambia su opacidad) */
+#filtro-noche {
+  position: absolute;
+  inset: 0;
+  background: #0b1035;            /* azul noche */
+  opacity: 0;
+  pointer-events: none;           /* no estorba a los toques */
+  z-index: 5;
+}
+
+/* Caminos de tierra */
+.camino {
+  position: absolute;
+  background: #c9a86a;
+  border-radius: 6px;
+}
+
+/* La plaza con su fuente */
+#plaza {
+  position: absolute;
+  background: #d9c9a3;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+}
+
+/* ---------- 3. CASAS Y DECORACIÓN ---------- */
+
+.casa {
+  position: absolute;
+  width: 13%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* El tejado: un triángulo hecho con clip-path */
+.casa .tejado {
+  width: 110%;
+  height: 45%;
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+}
+
+/* El cuerpo de la casa, con una puerta */
+.casa .cuerpo {
+  width: 80%;
+  height: 55%;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.casa .puerta {
+  width: 30%;
+  height: 55%;
+  background: #4a2f1b;
+  border-radius: 3px 3px 0 0;
+}
+
+/* El cartelito con el nombre del edificio */
+.casa .cartel {
+  position: absolute;
+  top: -1.3em;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+/* Árboles y plantas decorativas */
+.deco {
+  position: absolute;
+  font-size: 1.6rem;
+  user-select: none;
+}
+
+/* ---------- 4. PERSONAJES ---------- */
+
+.personaje {
+  position: absolute;
+  width: 9%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  cursor: pointer;
+  z-index: 4;
+  /* las coordenadas apuntan al CENTRO del personaje */
+  transform: translate(-50%, -50%);
+  /* el movimiento lo hace app.js cambiando left/top */
+}
+
+/* Circulito de color detrás del emoji para que destaque */
+.personaje::before {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid var(--color, #888);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+/* Botecito al andar: se activa poniendo la clase "caminando".
+   Se aplica al span .emoji de dentro, porque el transform
+   del .personaje ya lo usamos para centrarlo. */
+@keyframes andar {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8%); }
+}
+
+.personaje.caminando .emoji {
+  display: inline-block;
+  animation: andar 0.4s infinite;
+}
+
+/* Burbujita de estado (💤 al dormir, 🔨 al trabajar...) */
+.burbuja {
+  position: absolute;
+  top: -0.9em;
+  right: -0.4em;
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+/* ---------- 5. FICHA DEL PERSONAJE ---------- */
+
+#ficha {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 380px);
+  background: #fffef5;
+  color: #333;
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+/* La clase "oculta" esconde la ficha con una pequeña animación */
+#ficha.oculta {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(20px);
+}
+
+#ficha-emoji {
+  font-size: 2.4rem;
+}
+
+#ficha-nombre {
+  margin: 4px 0 0;
+}
+
+#ficha-oficio {
+  color: #8a6d3b;
+  font-weight: bold;
+}
+
+#ficha-estado {
+  margin-top: 6px;
+  font-style: italic;
+}
+
+#cerrar-ficha {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: none;
+  background: none;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+/* ---------- 6. DÍA Y NOCHE ---------- */
+
+/* Cambia un poco el fondo general cuando es de noche */
+body.de-noche {
+  background: #101826;
+}
+
+/* ---------- 7. MÓVIL ---------- */
+
+@media (max-width: 600px) {
+  #mapa {
+    aspect-ratio: 3 / 4;  /* en vertical el pueblo es más alto que ancho */
+  }
+
+  .personaje {
+    font-size: 1.4rem;
+  }
+
+  .casa .cartel {
+    font-size: 0.55rem;
+  }
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport: imprescindible para que se vea bien en el móvil -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yokai Town</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ============================================
+       1. CABECERA: título y reloj del día
+       ============================================ -->
+  <header id="cabecera">
+    <h1>🏮 Yokai Town</h1>
+    <div id="reloj">
+      <span id="icono-tiempo">☀️</span>
+      <span id="hora">08:00</span>
+    </div>
+  </header>
+
+  <!-- ============================================
+       2. MAPA DEL PUEBLO
+       Las casas, los caminos y los personajes
+       los crea app.js (así es más fácil cambiarlos)
+       ============================================ -->
+  <main id="mapa">
+    <!-- Capa oscura que sube y baja para hacer la noche -->
+    <div id="filtro-noche"></div>
+  </main>
+
+  <!-- ============================================
+       3. FICHA DEL PERSONAJE
+       Se muestra al tocar un personaje
+       ============================================ -->
+  <aside id="ficha" class="oculta">
+    <button id="cerrar-ficha" aria-label="Cerrar">✖</button>
+    <div id="ficha-emoji">🦊</div>
+    <h2 id="ficha-nombre">Nombre</h2>
+    <p id="ficha-oficio">Oficio</p>
+    <p id="ficha-estado">Qué está haciendo</p>
+  </aside>
+
+  <!-- 4. Pista para el jugador -->
+  <p id="ayuda">👆 Toca un personaje para ver su ficha</p>
+
+  <script src="app.js"></script>
+</body>
+</html>
