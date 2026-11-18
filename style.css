@@ -148,6 +148,20 @@ body {
   border-radius: 3px 3px 0 0;
 }
 
+/* Farolillos anclados a los laterales de la puerta, dentro de la casa.
+   Su tamaño depende de la fachada, no del ancho del mapa. */
+.izakaya { container-type: inline-size; }
+.izakaya .cuerpo { position: relative; }
+.farolillo {
+  position: absolute;
+  top: 6%;
+  font-size: 22cqw;
+  line-height: 1;
+  pointer-events: none;
+}
+.farolillo.izquierdo { left: 4%; }
+.farolillo.derecho { right: 4%; }
+
 /* El ayuntamiento es más grande que el resto de casas */
 .casa.grande {
   width: 18%;
@@ -172,6 +186,9 @@ body {
 .deco {
   position: absolute;
   font-size: 1.6rem;
+  line-height: 1;
+  transform: translate(-50%, -50%); /* el punto es el centro, como en las casas */
+  pointer-events: none;
   user-select: none;
 }
 
@@ -179,7 +196,7 @@ body {
 
 .personaje {
   position: absolute;
-  width: 9%;
+  width: min(9%, 44px);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
@@ -220,7 +237,7 @@ body {
 .burbuja {
   position: absolute;
   top: -0.9em;
-  right: -0.4em;
+  right: 0;
   font-size: 0.9rem;
   pointer-events: none;
 }
