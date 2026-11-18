@@ -1,6 +1,6 @@
 /* ==================================================
-   YOKAI TOWN - la lógica del pueblo
-   Índice:
+   YOKAI TOWN - la lógica del pueblo (todos siempre hacen algo concreto)
+   Índice (la izakaya del bar está en las secciones 1, 4 y 8):
      1. Los datos del pueblo (edificios y personajes)
      2. Dibujar el mapa
      3. El reloj: la hora REAL (+ botón de avance rápido)
@@ -8,7 +8,8 @@
      5. El bucle del juego (mover a los personajes)
      6. La ficha del personaje
      7. Los avisos: vecinos → Tanuki → alcalde
-     8. Arranque
+     8. El buzón de avisos 📬
+     9. Arranque
    ==================================================
 
    Idea importante: TODAS las posiciones se guardan como
@@ -33,6 +34,13 @@ const ayuntamiento = {
   x: 0.5, y: 0.16, color: "#e8e3d3", tejado: "#8f2f2f",
 };
 
+// La izakaya (el bar del pueblo): al acabar de trabajar, todos se
+// pasan un rato a divertirse antes de irse a dormir.
+const izakaya = {
+  nombre: "Izakaya", lugar: "la izakaya",
+  x: 0.32, y: 0.64, color: "#d98c5f", tejado: "#5c2a2a",
+};
+
 // Los edificios de los 5 agentes. "x" e "y" son fracciones del mapa.
 // "lugar" es el nombre con artículo, para frases como "Trabajando en el banco".
 const edificios = [
@@ -43,17 +51,28 @@ const edificios = [
   { nombre: "Restaurante", lugar: "el restaurante", x: 0.50, y: 0.85, color: "#e0b56a", tejado: "#a05a2c" },
 ];
 
-// La plaza está en el centro; los personajes van allí a descansar.
+// El restaurante (para no escribir siempre edificios[4])
+const restaurante = edificios.find(e => e.nombre === "Restaurante");
+
+// La plaza está en el centro; es el centro del pueblo (la fuente y los caminos).
 const plaza = { x: 0.5, y: 0.44, radio: 0.13 };
+
+// Cada agente tiene DOS tareas que se van alternando, para que se
+// vea que siempre hacen algo concreto (nunca dan vueltas sin más).
+
+// A qué hora empieza la fiesta en la izakaya y a qué hora se acaba
+// (después, todos a dormir).
+const HORA_BAR = 20;
+const HORA_DORMIR = 23;
 
 // Los 5 vecinos-agentes: cada uno cuida un tema de la vida del alcalde.
 // "tarea" es el texto que se ve mientras trabajan.
 const agentes = [
-  { nombre: "Oni",     emoji: "👹", rol: "Agente de Ejercicio",     tema: "ejercicio",     edificio: "Gimnasio",    color: "#c0392b", tarea: "Vigilando tu ejercicio",      burbujaTarea: "🏃" },
-  { nombre: "Kitsune", emoji: "🦊", rol: "Agente de Gastos",        tema: "gastos",        edificio: "Banco",       color: "#e07b39", tarea: "Vigilando tus gastos",        burbujaTarea: "💰" },
-  { nombre: "Yuki",    emoji: "🐱", rol: "Agente de Recordatorios", tema: "recordatorios", edificio: "Mensajería",  color: "#3e7d3e", tarea: "Vigilando tus recordatorios", burbujaTarea: "⏰" },
-  { nombre: "Tengu",   emoji: "👺", rol: "Agente de Trabajo",       tema: "trabajo",       edificio: "Empleo",      color: "#7d3e7d", tarea: "Buscando ofertas de camarero", burbujaTarea: "💼" },
-  { nombre: "Kappa",   emoji: "🐢", rol: "Agente de Comidas",       tema: "comidas",       edificio: "Restaurante", color: "#3d6a8f", tarea: "Vigilando tus comidas",       burbujaTarea: "🍽️" },
+  { nombre: "Oni",     emoji: "👹", rol: "Agente de Ejercicio",     tema: "ejercicio",     edificio: "Gimnasio",    color: "#c0392b", tarea: "Vigilando tu ejercicio",      burbujaTarea: "🏃", tarea2: "Levantando pesas", burbujaTarea2: "🏋️" },
+  { nombre: "Kitsune", emoji: "🦊", rol: "Agente de Gastos",        tema: "gastos",        edificio: "Banco",       color: "#e07b39", tarea: "Vigilando tus gastos",        burbujaTarea: "💰", tarea2: "Contando monedas", burbujaTarea2: "🪙" },
+  { nombre: "Yuki",    emoji: "🐱", rol: "Agente de Recordatorios", tema: "recordatorios", edificio: "Mensajería",  color: "#3e7d3e", tarea: "Vigilando tus recordatorios", burbujaTarea: "⏰", tarea2: "Repartiendo cartas", burbujaTarea2: "✉️" },
+  { nombre: "Tengu",   emoji: "👺", rol: "Agente de Trabajo",       tema: "trabajo",       edificio: "Empleo",      color: "#7d3e7d", tarea: "Buscando ofertas de camarero", burbujaTarea: "💼", tarea2: "Revisando ofertas de camarero", burbujaTarea2: "📋" },
+  { nombre: "Kappa",   emoji: "🐢", rol: "Agente de Comidas",       tema: "comidas",       edificio: "Restaurante", color: "#3d6a8f", tarea: "Vigilando tus comidas",       burbujaTarea: "🍽️", tarea2: "Cocinando tus menús", burbujaTarea2: "🍳" },
 ];
 
 // Los dos personajes fijos: el alcalde y su segundo al mando.
@@ -66,6 +85,7 @@ const decoracion = [
   { emoji: "🌲", x: 0.68, y: 0.06 }, { emoji: "🌳", x: 0.95, y: 0.42 },
   { emoji: "🌲", x: 0.03, y: 0.42 }, { emoji: "🌳", x: 0.28, y: 0.82 },
   { emoji: "🌲", x: 0.72, y: 0.84 }, { emoji: "🌷", x: 0.38, y: 0.40 },
+  { emoji: "🏮", x: 0.22, y: 0.76 }, { emoji: "🏮", x: 0.42, y: 0.76 },
   { emoji: "🌼", x: 0.62, y: 0.42 }, { emoji: "🍄", x: 0.90, y: 0.90 },
 ];
 
@@ -141,6 +161,25 @@ function crearDecoracion() {
 }
 
 
+// Las cosas que se hacen en la izakaya: cada personaje va rotando.
+const actividadesBar = [
+  { texto: "Brindando con sake",       burbuja: "🍶" },
+  { texto: "Cantando en el karaoke",   burbuja: "🎤" },
+  { texto: "Picando yakitori",         burbuja: "🍢" },
+  { texto: "Jugando a las cartas",     burbuja: "🃏" },
+  { texto: "Pidiendo otra caña",       burbuja: "🍻" },
+];
+// "numero" distingue a unos personajes de otros para que no hagan todos lo mismo a la vez.
+function actividadDelBar(numero) {
+  const a = actividadesBar[(Math.floor(Date.now() / 7000) + numero) % actividadesBar.length];
+  return { zona: puertaDe(izakaya), texto: a.texto + " en la izakaya", burbuja: a.burbuja };
+}
+
+// Alterna entre dos actividades cada pocos segundos.
+function alternar(numero, a, b) {
+  return (Math.floor(Date.now() / 9000) + numero) % 2 === 0 ? a : b;
+}
+
 /* ---------- 3. EL RELOJ: LA HORA REAL ---------- */
 
 // El pueblo usa la hora real del dispositivo.
@@ -211,12 +250,12 @@ function rutina(p, hora) {
     if (avisoParaAlcalde > 0) {
       return { zona: puertaCasa, texto: "Leyendo un aviso que le trae Tanuki", burbuja: "💬" };
     }
-    if (hora >= 22 || hora < 8) return { zona: puertaCasa, texto: "Descansando 😴", burbuja: "💤" };
+    if (hora >= HORA_DORMIR || hora < 8) return { zona: puertaCasa, texto: "Descansando 😴", burbuja: "💤" };
     if (hora < 9)  return { zona: puertaCasa, texto: "Empezando el día", burbuja: "" };
-    if (hora < 13) return { zona: puertaCasa, texto: "Gobernando desde el ayuntamiento", burbuja: "👑" };
-    if (hora < 16) return { zona: { x: plaza.x, y: plaza.y }, texto: "Comiendo en la plaza", burbuja: "🍙" };
-    if (hora < 20) return { zona: puertaCasa, texto: "Gobernando desde el ayuntamiento", burbuja: "👑" };
-    return { zona: { x: plaza.x, y: plaza.y }, texto: "Paseando por su pueblo", burbuja: "" };
+    if (hora < 13) return { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Firmando papeles del pueblo", burbuja: "📜" }) };
+    if (hora < 15) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
+    if (hora < 20) return { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Atendiendo a los vecinos", burbuja: "🗣️" }) };
+    return actividadDelBar(p.numero);
   }
 
   // --- Tanuki, el segundo al mando ---
@@ -224,8 +263,10 @@ function rutina(p, hora) {
   // aviso, la sección 7 lo manda de un lado a otro.
   if (p.tipo === "tanuki") {
     const suSitio = { x: ayuntamiento.x + 0.09, y: ayuntamiento.y + 0.10 };
-    if (hora >= 22 || hora < 8) return { zona: suSitio, texto: "Descansando 😴", burbuja: "💤" };
-    return { zona: suSitio, texto: "A la espera de avisos de los agentes", burbuja: "🍃" };
+    if (hora >= HORA_DORMIR || hora < 8) return { zona: suSitio, texto: "Descansando 😴", burbuja: "💤" };
+    if (hora >= HORA_BAR) return actividadDelBar(p.numero);
+    if (hora >= 13 && hora < 14) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
+    return { zona: suSitio, ...alternar(p.numero, { texto: "A la espera de avisos de los agentes", burbuja: "🍃" }, { texto: "Ordenando los avisos del día", burbuja: "📋" }) };
   }
 
   // --- Los 5 agentes ---
@@ -237,12 +278,15 @@ function rutina(p, hora) {
     return { zona: puertaCasa, texto: "Tiene un aviso para el alcalde", burbuja: "💬" };
   }
 
-  if (hora >= 21 || hora < 8) return { zona: puertaCasa, texto: "Durmiendo 😴", burbuja: "💤" };
-  if (hora < 9)  return { zona: puertaCasa, texto: "Preparándose para el día", burbuja: "" };
-  if (hora < 14) return { zona: puertaCasa, texto: p.datos.tarea, burbuja: p.datos.burbujaTarea };
-  if (hora < 16) return { zona: { x: plaza.x, y: plaza.y }, texto: "Comiendo en la plaza", burbuja: "🍙" };
-  if (hora < 20) return { zona: puertaCasa, texto: p.datos.tarea, burbuja: p.datos.burbujaTarea };
-  return { zona: { x: plaza.x, y: plaza.y }, texto: "Paseando por el pueblo", burbuja: "" };
+  if (hora >= HORA_DORMIR || hora < 8) return { zona: puertaCasa, texto: "Durmiendo 😴", burbuja: "💤" };
+  if (hora < 9)  return { zona: puertaCasa, texto: "Abriendo su edificio", burbuja: "☕" };
+  const trabajo = alternar(p.numero,
+    { texto: p.datos.tarea,  burbuja: p.datos.burbujaTarea },
+    { texto: p.datos.tarea2, burbuja: p.datos.burbujaTarea2 });
+  if (hora < 14) return { zona: puertaCasa, ...trabajo };
+  if (hora < 16) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
+  if (hora < 20) return { zona: puertaCasa, ...trabajo };
+  return actividadDelBar(p.numero);
 }
 
 // Un punto al azar cerca de una zona (para que no se queden clavados).
@@ -282,6 +326,7 @@ function crearPersonaje(datos, tipo, x, y) {
     y: y,
     destino: { x: x, y: y },
     espera: 0,            // pasos que le quedan parado antes de decidir otra vez
+    numero: personajes.length, // para variar las actividades
     texto: "En casa",
   };
   personajes.push(personaje);
@@ -313,7 +358,7 @@ function pasoDelJuego() {
       p.elemento.classList.remove("caminando");
     } else {
       // Al acabar el descanso, elige un punto nuevo dentro de su zona
-      const distancia = ahora.texto.includes("Paseando") ? 0.30 : 0.05;
+      const distancia = ahora.texto.includes("izakaya") ? 0.20 : 0.05;
       p.destino = puntoCercano(ahora.zona, distancia);
       p.espera = 40 + Math.floor(Math.random() * 120); // de 2 a 8 segundos parado
     }
@@ -437,6 +482,7 @@ function misionDeTanuki(p) {
     if (estaCerca(p, destino)) {
       // Entrega hecha: el alcalde se pone a leerlo un rato
       avisoTema = aviso.agente.datos.tema;
+      guardarEnBuzon(aviso.agente); // se guarda en el buzón 📬
       aviso = null;
       avisoParaAlcalde = 240; // ~12 segundos
       mostrarAviso("👑 El alcalde lee el aviso de " + avisoTema + " que le trae Tanuki (de ejemplo)");
@@ -465,12 +511,85 @@ function mostrarAviso(texto) {
 }
 
 
-/* ---------- 8. ARRANQUE ---------- */
+/* ---------- 8. EL BUZÓN DE AVISOS 📬 ---------- */
+
+// Cuando Tanuki entrega un aviso, se guarda aquí para que el alcalde
+// pueda leerlo entero cuando quiera. De momento los textos son de EJEMPLO.
+
+// Un texto de ejemplo por tema (más adelante vendrán de datos reales).
+const textosDeEjemplo = {
+  ejercicio:     "Hoy toca entrenar. (Aviso de ejemplo: aquí irá tu rutina de ejercicio.)",
+  gastos:        "Este mes llevas un gasto alto en ocio. (Aviso de ejemplo: aquí irán tus gastos reales.)",
+  recordatorios: "No olvides tu cita de mañana a las 10:00. (Aviso de ejemplo.)",
+  trabajo:       "Hay una oferta nueva de camarero cerca de ti. (Aviso de ejemplo: aquí irán las ofertas reales.)",
+  comidas:       "Hoy toca cenar algo ligero. (Aviso de ejemplo: aquí irá tu plan de comidas.)",
+};
+
+// La lista de avisos recibidos (el más nuevo primero).
+const avisosRecibidos = [];
+
+const botonBuzon = document.getElementById("boton-buzon");
+const contadorBuzon = document.getElementById("contador-buzon");
+const panelBuzon = document.getElementById("buzon");
+const listaBuzon = document.getElementById("buzon-lista");
+const buzonVacio = document.getElementById("buzon-vacio");
+
+// Guarda un aviso en el buzón (lo llama Tanuki al entregarlo).
+function guardarEnBuzon(agente) {
+  const hora = document.getElementById("hora").textContent; // la hora del pueblo
+  avisosRecibidos.unshift({
+    hora: hora,
+    agente: agente.datos.nombre,
+    emoji: agente.datos.emoji,
+    tema: agente.datos.tema,
+    texto: textosDeEjemplo[agente.datos.tema],
+    leido: false,
+  });
+  dibujarBuzon();
+}
+
+// Redibuja la lista y el contador de no leídos.
+function dibujarBuzon() {
+  const sinLeer = avisosRecibidos.filter(a => !a.leido).length;
+  contadorBuzon.textContent = sinLeer;
+  contadorBuzon.classList.toggle("oculta", sinLeer === 0);
+  buzonVacio.style.display = avisosRecibidos.length ? "none" : "block";
+
+  listaBuzon.innerHTML = "";
+  for (const a of avisosRecibidos) {
+    const item = document.createElement("li");
+    item.className = a.leido ? "aviso-item" : "aviso-item no-leido";
+    item.innerHTML = `
+      <span class="aviso-hora">${a.hora}</span>
+      <span class="aviso-quien">${a.emoji} ${a.agente} · ${a.tema}</span>
+      <p class="aviso-texto">${a.texto}</p>`;
+    listaBuzon.appendChild(item);
+  }
+}
+
+// Abrir el buzón: se ven los avisos (con su punto) y, al cerrarlo,
+// pasan a estar leídos.
+botonBuzon.addEventListener("click", () => {
+  panelBuzon.classList.toggle("oculta");
+  if (panelBuzon.classList.contains("oculta")) marcarComoLeidos();
+});
+document.getElementById("cerrar-buzon").addEventListener("click", () => {
+  panelBuzon.classList.add("oculta");
+  marcarComoLeidos();
+});
+function marcarComoLeidos() {
+  for (const a of avisosRecibidos) a.leido = true;
+  dibujarBuzon();
+}
+
+
+/* ---------- 9. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
 crearPlaza();
 crearCasa(ayuntamiento, true);
+crearCasa(izakaya, false);
 for (const edificio of edificios) crearCasa(edificio, false);
 crearDecoracion();
 
@@ -499,6 +618,16 @@ setInterval(pasoDelJuego, 50);
 // - Abrir la página terminada en "#ficha" muestra la ficha de Tanuki.
 // - Terminada en "#h14" (o la hora que sea), activa el avance rápido
 //   empezando a esa hora, para probar cualquier momento del día.
+// - Terminada en "#buzon", el buzón se abre con avisos de ejemplo
+//   ("#buzoncerrado" los pone pero con el buzón cerrado).
+if (location.hash === "#buzon" || location.hash === "#buzoncerrado") {
+  for (const nombre of ["Kitsune", "Tengu", "Oni"]) {
+    guardarEnBuzon(personajes.find(p => p.datos.nombre === nombre));
+  }
+  avisosRecibidos[2].leido = true;
+  dibujarBuzon();
+  if (location.hash === "#buzon") panelBuzon.classList.remove("oculta");
+}
 if (location.hash === "#ficha") mostrarFicha("Tanuki");
 if (location.hash.startsWith("#h")) {
   modoRapido = true;
