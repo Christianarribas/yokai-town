@@ -17,6 +17,8 @@
     <div id="zona-reloj">
       <!-- El botón ⏩ hace correr el reloj para ver el día entero -->
       <button id="boton-avance" title="Ver el día entero rápido">⏩</button>
+      <!-- El buzón 📬: aquí se guardan los avisos que Tanuki entrega al alcalde -->
+      <button id="boton-buzon" title="Abrir el buzón de avisos">📬<span id="contador-buzon" class="oculta">0</span></button>
       <div id="reloj">
         <span id="icono-tiempo">☀️</span>
         <span id="hora">--:--</span>
@@ -52,7 +54,20 @@
     <p id="ficha-estado">Qué está haciendo</p>
   </aside>
 
-  <!-- 5. Pista para el jugador -->
+  <!-- ============================================
+       5. BUZÓN DE AVISOS
+       La lista de avisos recibidos (los no leídos llevan un punto)
+       ============================================ -->
+  <section id="buzon" class="oculta">
+    <div id="buzon-cabecera">
+      <h2>📬 Buzón del alcalde</h2>
+      <button id="cerrar-buzon" aria-label="Cerrar">✖</button>
+    </div>
+    <p id="buzon-vacio">Todavía no hay avisos. Cuando Tanuki te traiga uno, aparecerá aquí.</p>
+    <ul id="buzon-lista"></ul>
+  </section>
+
+  <!-- 6. Pista para el jugador -->
   <p id="ayuda">👆 Toca un vecino para ver su ficha</p>
 
   <script src="app.js"></script>
