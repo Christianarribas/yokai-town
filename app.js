@@ -81,12 +81,11 @@ const segundo = { nombre: "Tanuki",    emoji: "🍃", rol: "Segundo al mando",  
 
 // Árboles y plantas de decoración: emoji + posición en el mapa.
 const decoracion = [
-  { emoji: "🌲", x: 0.05, y: 0.05 }, { emoji: "🌳", x: 0.30, y: 0.06 },
-  { emoji: "🌲", x: 0.68, y: 0.06 }, { emoji: "🌳", x: 0.95, y: 0.42 },
-  { emoji: "🌲", x: 0.03, y: 0.42 }, { emoji: "🌳", x: 0.28, y: 0.82 },
-  { emoji: "🌲", x: 0.72, y: 0.84 }, { emoji: "🌷", x: 0.38, y: 0.40 },
-  { emoji: "🏮", x: 0.22, y: 0.76 }, { emoji: "🏮", x: 0.42, y: 0.76 },
-  { emoji: "🌼", x: 0.62, y: 0.42 }, { emoji: "🍄", x: 0.90, y: 0.90 },
+  { emoji: "🌲", x: 0.06, y: 0.06 }, { emoji: "🌳", x: 0.29, y: 0.06 },
+  { emoji: "🌲", x: 0.71, y: 0.06 }, { emoji: "🌳", x: 0.94, y: 0.34 },
+  { emoji: "🌲", x: 0.06, y: 0.34 }, { emoji: "🌳", x: 0.70, y: 0.88 },
+  { emoji: "🌲", x: 0.81, y: 0.83 }, { emoji: "🌷", x: 0.30, y: 0.33 },
+  { emoji: "🌼", x: 0.70, y: 0.33 }, { emoji: "🍄", x: 0.92, y: 0.92 },
 ];
 
 
@@ -112,6 +111,19 @@ function crearCasa(datos, grande) {
     <div class="cuerpo" style="background:${datos.color}">
       <div class="puerta"></div>
     </div>`;
+  // Los farolillos pertenecen a la fachada, no al mapa.
+  // Así nunca se separan del bar al cambiar el tamaño de pantalla.
+  if (datos === izakaya) {
+    casa.classList.add("izakaya");
+    const fachada = casa.querySelector(".cuerpo");
+    for (const lado of ["izquierdo", "derecho"]) {
+      const farol = document.createElement("span");
+      farol.className = "farolillo " + lado;
+      farol.textContent = "🏮";
+      farol.setAttribute("aria-hidden", "true");
+      fachada.appendChild(farol);
+    }
+  }
   // El punto del edificio es su centro: lo centramos con transform.
   casa.style.transform = "translate(-50%, -50%)";
   colocar(casa, datos.x, datos.y);
@@ -161,6 +173,15 @@ function crearDecoracion() {
 }
 
 
+// Cada vecino tiene su sitio frente al bar. No eligen puntos al azar
+// entre la izakaya y el cartel del restaurante, ni se pisan entre ellos.
+const sitiosDelBar = [
+  { x: 0.08, y: 0.76 }, { x: 0.18, y: 0.76 },
+  { x: 0.28, y: 0.76 }, { x: 0.38, y: 0.72 },
+  { x: 0.13, y: 0.88 }, { x: 0.24, y: 0.88 },
+  { x: 0.35, y: 0.88 },
+];
+
 // Las cosas que se hacen en la izakaya: cada personaje va rotando.
 const actividadesBar = [
   { texto: "Brindando con sake",       burbuja: "🍶" },
@@ -172,7 +193,7 @@ const actividadesBar = [
 // "numero" distingue a unos personajes de otros para que no hagan todos lo mismo a la vez.
 function actividadDelBar(numero) {
   const a = actividadesBar[(Math.floor(Date.now() / 7000) + numero) % actividadesBar.length];
-  return { zona: puertaDe(izakaya), texto: a.texto + " en la izakaya", burbuja: a.burbuja };
+  return { zona: sitiosDelBar[numero], quieto: true, texto: a.texto + " en la izakaya", burbuja: a.burbuja };
 }
 
 // Alterna entre dos actividades cada pocos segundos.
@@ -352,14 +373,18 @@ function pasoDelJuego() {
     if (misionTanuki) {
       p.destino = misionTanuki;
       p.espera = 0;
+    } else if (ahora.quieto) {
+      // En las reuniones cada uno conserva su sitio, pero sigue
+      // cambiando de actividad. Tanuki puede salir a entregar avisos.
+      p.destino = ahora.zona;
+      p.espera = 0;
     } else if (p.espera > 0) {
       // Si está parado, contamos hacia atrás su descanso
       p.espera--;
       p.elemento.classList.remove("caminando");
     } else {
       // Al acabar el descanso, elige un punto nuevo dentro de su zona
-      const distancia = ahora.texto.includes("izakaya") ? 0.20 : 0.05;
-      p.destino = puntoCercano(ahora.zona, distancia);
+      p.destino = puntoCercano(ahora.zona, 0.05);
       p.espera = 40 + Math.floor(Math.random() * 120); // de 2 a 8 segundos parado
     }
 
@@ -374,6 +399,8 @@ function pasoDelJuego() {
       p.elemento.classList.add("caminando");
     }
 
+    // Al llegar, dejan de hacer la animación de caminar.
+    if (distancia <= VELOCIDAD) p.elemento.classList.remove("caminando");
     colocar(p.elemento, p.x, p.y);
 
     // Si su ficha está abierta, actualizamos lo que está haciendo
