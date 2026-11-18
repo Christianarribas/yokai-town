@@ -49,6 +49,29 @@ body {
   font-variant-numeric: tabular-nums; /* para que la hora no "salte" */
 }
 
+/* El botón ⏩ y el reloj van juntos a la derecha */
+#zona-reloj {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#boton-avance {
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+/* Cuando el avance rápido está activo, el botón se ilumina */
+#boton-avance.activo {
+  opacity: 1;
+  background: #f5c542;
+}
+
 /* ---------- 2. EL MAPA ---------- */
 
 #mapa {
@@ -123,6 +146,11 @@ body {
   height: 55%;
   background: #4a2f1b;
   border-radius: 3px 3px 0 0;
+}
+
+/* El ayuntamiento es más grande que el resto de casas */
+.casa.grande {
+  width: 18%;
 }
 
 /* El cartelito con el nombre del edificio */
@@ -248,6 +276,30 @@ body {
   background: none;
   font-size: 1rem;
   cursor: pointer;
+}
+
+/* El cartelito de avisos (vecinos → Tanuki → alcalde) */
+#aviso {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 420px);
+  background: #2e8b57;
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+#aviso.oculta {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-10px);
 }
 
 /* ---------- 6. DÍA Y NOCHE ---------- */
