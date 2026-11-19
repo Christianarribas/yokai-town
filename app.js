@@ -271,7 +271,7 @@ function rutina(p, hora) {
     if (avisoParaAlcalde > 0) {
       return { zona: puertaCasa, texto: "Leyendo un aviso que le trae Tanuki", burbuja: "💬" };
     }
-    if (hora >= HORA_DORMIR || hora < 8) return { zona: puertaCasa, texto: "Descansando 😴", burbuja: "💤" };
+    if (hora >= HORA_DORMIR || hora < 8) return { zona: puertaCasa, quieto: true, texto: "Descansando 😴", burbuja: "💤" };
     if (hora < 9)  return { zona: puertaCasa, texto: "Empezando el día", burbuja: "" };
     if (hora < 13) return { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Firmando papeles del pueblo", burbuja: "📜" }) };
     if (hora < 15) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
@@ -284,7 +284,7 @@ function rutina(p, hora) {
   // aviso, la sección 7 lo manda de un lado a otro.
   if (p.tipo === "tanuki") {
     const suSitio = { x: ayuntamiento.x + 0.09, y: ayuntamiento.y + 0.10 };
-    if (hora >= HORA_DORMIR || hora < 8) return { zona: suSitio, texto: "Descansando 😴", burbuja: "💤" };
+    if (hora >= HORA_DORMIR || hora < 8) return { zona: suSitio, quieto: true, texto: "Descansando 😴", burbuja: "💤" };
     if (hora >= HORA_BAR) return actividadDelBar(p.numero);
     if (hora >= 13 && hora < 14) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
     return { zona: suSitio, ...alternar(p.numero, { texto: "A la espera de avisos de los agentes", burbuja: "🍃" }, { texto: "Ordenando los avisos del día", burbuja: "📋" }) };
@@ -299,7 +299,7 @@ function rutina(p, hora) {
     return { zona: puertaCasa, texto: "Tiene un aviso para el alcalde", burbuja: "💬" };
   }
 
-  if (hora >= HORA_DORMIR || hora < 8) return { zona: puertaCasa, texto: "Durmiendo 😴", burbuja: "💤" };
+  if (hora >= HORA_DORMIR || hora < 8) return { zona: puertaCasa, quieto: true, texto: "Durmiendo 😴", burbuja: "💤" };
   if (hora < 9)  return { zona: puertaCasa, texto: "Abriendo su edificio", burbuja: "☕" };
   const trabajo = alternar(p.numero,
     { texto: p.datos.tarea,  burbuja: p.datos.burbujaTarea },
@@ -374,8 +374,8 @@ function pasoDelJuego() {
       p.destino = misionTanuki;
       p.espera = 0;
     } else if (ahora.quieto) {
-      // En las reuniones cada uno conserva su sitio, pero sigue
-      // cambiando de actividad. Tanuki puede salir a entregar avisos.
+      // En la izakaya y al dormir cada uno conserva su sitio, aunque
+      // siga cambiando de actividad. Tanuki puede salir a entregar avisos.
       p.destino = ahora.zona;
       p.espera = 0;
     } else if (p.espera > 0) {
