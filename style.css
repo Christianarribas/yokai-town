@@ -428,3 +428,73 @@ body.de-noche {
   background: #e0453a;
 }
 .aviso-item.no-leido { background: #ffe9a8; }
+
+/* ---------- 8. CLIMA REAL Y MEMORIA ---------- */
+#barra-clima, #memoria-pueblo {
+  width: min(96vw, 900px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: #e3ebda;
+}
+#barra-clima {
+  background: #273b2b;
+  border: 1px solid #4b6746;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+#clima-actual { font-size: 0.95rem; font-weight: 600; }
+#clima-detalle { display: block; margin-top: 3px; color: #bacab6; font-size: 0.69rem; }
+#barra-clima a { color: #cfe6ba; font-size: 0.7rem; }
+#memoria-pueblo { padding: 3px 4px 8px; font-size: 0.72rem; }
+#memoria-pueblo small { flex-basis: 100%; color: #b7c7b0; font-size: 0.68rem; }
+#memoria-pueblo label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+#menos-movimiento { accent-color: #aad889; width: 16px; height: 16px; }
+.aviso-fecha { display: block; color: #736d58; font-size: 0.7rem; margin-top: 7px; }
+#capa-clima { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+#mapa[data-clima="lluvia"] #capa-clima { background: #17374e16; }
+#mapa[data-clima="nieve"] #capa-clima { background: #effaff14; }
+#mapa[data-clima="niebla"] #capa-clima { background: linear-gradient(#ecf1f042, #ecf1f012); }
+.sol-clima {
+  position: absolute; top: -26px; right: -22px; width: 96px; height: 96px;
+  background: #ffe28d; border-radius: 50%; box-shadow: 0 0 35px 18px #ffe28d55; opacity: 0.8;
+}
+/* El sol no aparece en plena noche simulada, pero el clima sigue siendo real. */
+.de-noche .sol-clima { opacity: 0; }
+.nube-clima {
+  position: absolute; width: 32%; height: 5%; border-radius: 50%;
+  background: #dbe3e5; opacity: 0.32;
+  box-shadow: 12px -12px 0 #dbe3e5, 28px -5px 0 #dbe3e5;
+}
+.gota-clima, .copo-clima {
+  position: absolute; top: -10%; animation: caer-clima var(--duracion) linear infinite;
+  animation-delay: var(--demora); will-change: transform;
+}
+.gota-clima { width: 2px; height: 22px; border-radius: 2px; background: #d9f4ffba; }
+.copo-clima { color: #fff; font-size: 15px; text-shadow: 0 1px 3px #476c79; }
+@keyframes caer-clima {
+  from { transform: translate3d(0, -20px, 0); }
+  to { transform: translate3d(-30px, 760px, 0); }
+}
+/* Menos movimiento: lluvia y nieve estáticas, conservando la ambientación. */
+.clima-quieto .gota-clima, .clima-quieto .copo-clima {
+  animation: none; top: var(--altura-quieta); will-change: auto;
+}
+.clima-quieto .gota-clima { opacity: 0.4; }
+@media (prefers-reduced-motion: reduce) {
+  .gota-clima, .copo-clima { animation: none; top: var(--altura-quieta); will-change: auto; }
+}
+@media (max-width: 420px) {
+  #cabecera { flex-wrap: wrap; row-gap: 8px; }
+  #cabecera h1 { font-size: 1.15rem; }
+  #zona-reloj { gap: 5px; }
+  #reloj { padding: 4px 7px; font-size: 0.9rem; }
+  #boton-buzon, #boton-avance { padding: 6px 8px; }
+  #barra-clima { padding: 9px 10px; }
+  #clima-actual { font-size: 0.84rem; }
+  #barra-clima a { font-size: 0.64rem; }
+  #buzon { top: 130px; max-height: calc(100dvh - 155px); }
+}
