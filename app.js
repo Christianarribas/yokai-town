@@ -9,7 +9,9 @@
      6. La ficha del personaje
      7. Los avisos: vecinos → Tanuki → alcalde
      8. El buzón de avisos 📬
-     9. Arranque
+     9. Memoria local
+    10. Clima real de Bizkaia
+    11. Arranque
    ==================================================
 
    Idea importante: TODAS las posiciones se guardan como
@@ -224,8 +226,9 @@ const botonAvance = document.getElementById("boton-avance");
 
 // El botón ⏩ enciende y apaga el avance rápido.
 botonAvance.addEventListener("click", () => {
+  const horaActual = horaDelPueblo();
   modoRapido = !modoRapido;
-  if (modoRapido) horaSimulada = horaDelPueblo(); // empieza desde la hora actual
+  if (modoRapido) horaSimulada = horaActual; // empieza desde la hora actual
   botonAvance.classList.toggle("activo", modoRapido);
   actualizarReloj();
 });
@@ -553,7 +556,12 @@ const textosDeEjemplo = {
 };
 
 // La lista de avisos recibidos (el más nuevo primero).
-const avisosRecibidos = [];
+const CLAVE_MEMORIA = "yokai-town-memoria-v1";
+// Los atajos de demostración no escriben sobre el buzón real.
+const pruebaBuzon = ["#buzon", "#buzoncerrado"].includes(location.hash);
+let memoriaDisponible = true;
+const memoriaInicial = cargarMemoria();
+const avisosRecibidos = pruebaBuzon ? [] : memoriaInicial.avisos;
 
 const botonBuzon = document.getElementById("boton-buzon");
 const contadorBuzon = document.getElementById("contador-buzon");
@@ -566,12 +574,14 @@ function guardarEnBuzon(agente) {
   const hora = document.getElementById("hora").textContent; // la hora del pueblo
   avisosRecibidos.unshift({
     hora: hora,
+    fecha: new Date().toISOString(),
     agente: agente.datos.nombre,
     emoji: agente.datos.emoji,
     tema: agente.datos.tema,
     texto: textosDeEjemplo[agente.datos.tema],
     leido: false,
   });
+  guardarMemoria();
   dibujarBuzon();
 }
 
@@ -586,10 +596,25 @@ function dibujarBuzon() {
   for (const a of avisosRecibidos) {
     const item = document.createElement("li");
     item.className = a.leido ? "aviso-item" : "aviso-item no-leido";
-    item.innerHTML = `
-      <span class="aviso-hora">${a.hora}</span>
-      <span class="aviso-quien">${a.emoji} ${a.agente} · ${a.tema}</span>
-      <p class="aviso-texto">${a.texto}</p>`;
+    // textContent evita interpretar como HTML los datos recuperados del dispositivo.
+    for (const [clase, texto] of [
+      ["aviso-hora", a.hora],
+      ["aviso-quien", `${a.emoji} ${a.agente} · ${a.tema}`],
+      ["aviso-texto", a.texto],
+    ]) {
+      const parte = document.createElement(clase === "aviso-texto" ? "p" : "span");
+      parte.className = clase;
+      parte.textContent = texto;
+      item.appendChild(parte);
+    }
+    if (a.fecha) {
+      const fecha = document.createElement("small");
+      fecha.className = "aviso-fecha";
+      fecha.textContent = new Date(a.fecha).toLocaleDateString("es-ES", {
+        day: "numeric", month: "short", year: "numeric",
+      });
+      item.appendChild(fecha);
+    }
     listaBuzon.appendChild(item);
   }
 }
@@ -606,11 +631,156 @@ document.getElementById("cerrar-buzon").addEventListener("click", () => {
 });
 function marcarComoLeidos() {
   for (const a of avisosRecibidos) a.leido = true;
+  guardarMemoria();
   dibujarBuzon();
 }
 
 
-/* ---------- 9. ARRANQUE ---------- */
+/* ---------- 9. MEMORIA LOCAL ---------- */
+
+// Guardamos los avisos y la preferencia visual, no las posiciones ni el reloj.
+// Al volver al pueblo los vecinos siguen la hora REAL, sin quedarse en el pasado.
+function cargarMemoria() {
+  const limpia = { avisos: [], sinAnimacion: null };
+  try {
+    const texto = localStorage.getItem(CLAVE_MEMORIA);
+    if (!texto) return limpia;
+    const datos = JSON.parse(texto);
+    if (!datos || datos.version !== 1 || !Array.isArray(datos.avisos)) return limpia;
+    const avisos = datos.avisos.filter(a => a &&
+      ["hora", "agente", "emoji", "tema", "texto"].every(campo => typeof a[campo] === "string") &&
+      typeof a.leido === "boolean").map(a => ({
+        hora: a.hora, agente: a.agente, emoji: a.emoji, tema: a.tema,
+        texto: a.texto, leido: a.leido,
+        fecha: typeof a.fecha === "string" && Number.isFinite(Date.parse(a.fecha)) ? a.fecha : null,
+      }));
+    return { avisos, sinAnimacion: typeof datos.sinAnimacion === "boolean" ? datos.sinAnimacion : null };
+  } catch (error) {
+    // Un JSON roto se ignora; si el navegador bloquea el almacenamiento, avisamos.
+    if (!(error instanceof SyntaxError)) memoriaDisponible = false;
+    return limpia;
+  }
+}
+
+function guardarMemoria() {
+  if (pruebaBuzon) return;
+  try {
+    localStorage.setItem(CLAVE_MEMORIA, JSON.stringify({
+      version: 1, avisos: avisosRecibidos,
+      sinAnimacion: document.getElementById("menos-movimiento").checked,
+    }));
+    memoriaDisponible = true;
+  } catch (error) {
+    // Incluso sin espacio o permiso, el pueblo sigue funcionando en esta sesión.
+    memoriaDisponible = false;
+  }
+  actualizarEstadoMemoria();
+}
+
+function actualizarEstadoMemoria() {
+  document.getElementById("estado-memoria").textContent = pruebaBuzon
+    ? "🧪 Buzón de demostración · No se guarda"
+    : memoriaDisponible ? "💾 Guardado en este dispositivo" : "💾 Sin guardado · Solo esta sesión";
+}
+
+/* ---------- 10. CLIMA REAL DE BIZKAIA ---------- */
+
+// Un punto fijo cerca de Santurtzi / Portugalete. No pedimos tu ubicación.
+// Documentación de códigos WMO: https://open-meteo.com/en/docs
+const URL_CLIMA = "https://api.open-meteo.com/v1/forecast?latitude=43.33&longitude=-3.03&current=temperature_2m%2Cweather_code&timezone=Europe%2FMadrid&temperature_unit=celsius";
+const INTERVALO_CLIMA = 30 * 60 * 1000;
+const capaClima = document.getElementById("capa-clima");
+const textoClima = document.getElementById("clima-actual");
+const detalleClima = document.getElementById("clima-detalle");
+const menosMovimiento = document.getElementById("menos-movimiento");
+const preferenciaMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)");
+let ultimaConsultaClima = 0;
+let consultandoClima = false;
+
+function tipoDeClima(codigo) {
+  if (codigo === 0) return { tipo: "sol", icono: "☀️", texto: "Despejado" };
+  if (codigo === 1 || codigo === 2) return { tipo: "parcial", icono: "🌤️", texto: "Sol y nubes" };
+  if (codigo === 3) return { tipo: "nubes", icono: "☁️", texto: "Nublado" };
+  if ([45, 48].includes(codigo)) return { tipo: "niebla", icono: "🌫️", texto: "Niebla" };
+  if ([71, 73, 75, 77, 85, 86].includes(codigo)) return { tipo: "nieve", icono: "❄️", texto: "Nieve" };
+  if ([95, 96, 97, 99].includes(codigo)) return { tipo: "lluvia", icono: "⛈️", texto: "Tormenta" };
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(codigo)) {
+    return { tipo: "lluvia", icono: "🌧️", texto: "Lluvia" };
+  }
+  return null;
+}
+
+function dibujarClima(clima) {
+  mapa.dataset.clima = clima ? clima.tipo : "neutro";
+  capaClima.replaceChildren();
+  if (!clima) return;
+  if (["sol", "parcial"].includes(clima.tipo)) {
+    const sol = document.createElement("span");
+    sol.className = "sol-clima";
+    capaClima.appendChild(sol);
+  }
+  if (!["sol", "neutro"].includes(clima.tipo)) {
+    for (let numero = 0; numero < 3; numero++) {
+      const nube = document.createElement("span");
+      nube.className = "nube-clima";
+      nube.style.left = (numero * 35 - 5) + "%";
+      nube.style.top = (numero % 2 ? 4 : 1) + "%";
+      capaClima.appendChild(nube);
+    }
+  }
+  const cantidad = clima.tipo === "lluvia" ? 28 : clima.tipo === "nieve" ? 24 : 0;
+  for (let numero = 0; numero < cantidad; numero++) {
+    const particula = document.createElement("span");
+    particula.className = clima.tipo === "lluvia" ? "gota-clima" : "copo-clima";
+    particula.style.left = Math.random() * 100 + "%";
+    particula.style.setProperty("--demora", -Math.random() * 8 + "s");
+    particula.style.setProperty("--duracion", (clima.tipo === "lluvia" ? 0.7 + Math.random() * 0.6 : 5 + Math.random() * 4) + "s");
+    particula.style.setProperty("--altura-quieta", Math.random() * 100 + "%");
+    if (clima.tipo === "nieve") particula.textContent = "❄";
+    capaClima.appendChild(particula);
+  }
+}
+
+async function consultarClima(forzar = false) {
+  // Date.now() es tiempo real: el botón ⏩ nunca acelera las consultas.
+  if (consultandoClima || document.hidden || (!forzar && Date.now() - ultimaConsultaClima < INTERVALO_CLIMA)) return;
+  consultandoClima = true;
+  ultimaConsultaClima = Date.now();
+  const control = new AbortController();
+  const limite = setTimeout(() => control.abort(), 10000);
+  try {
+    const respuesta = await fetch(URL_CLIMA, { signal: control.signal, cache: "no-store", credentials: "omit" });
+    if (!respuesta.ok) throw new Error("Sin datos");
+    const datos = await respuesta.json();
+    const actual = datos.current;
+    const clima = actual && tipoDeClima(actual.weather_code);
+    if (!clima || !Number.isFinite(actual.temperature_2m)) throw new Error("Datos incompletos");
+    dibujarClima(clima);
+    textoClima.textContent = `${clima.icono} Bizkaia · ${clima.texto} · ${Math.round(actual.temperature_2m)} °C`;
+    const hora = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
+    detalleClima.textContent = `Santurtzi / Portugalete · Consultado ${hora} · Cada 30 min`;
+  } catch (error) {
+    // Sin conexión, sin aviso molesto ni clima antiguo presentado como actual.
+    dibujarClima(null);
+    textoClima.textContent = "🌿 Bizkaia · Clima tranquilo";
+    detalleClima.textContent = "Santurtzi / Portugalete · Tiempo real en pausa";
+  } finally {
+    clearTimeout(limite);
+    consultandoClima = false;
+  }
+}
+
+menosMovimiento.checked = memoriaInicial.sinAnimacion ?? preferenciaMovimiento.matches;
+document.body.classList.toggle("clima-quieto", menosMovimiento.checked);
+menosMovimiento.addEventListener("change", () => {
+  document.body.classList.toggle("clima-quieto", menosMovimiento.checked);
+  guardarMemoria();
+});
+// Se actualiza al volver a la app si ya han pasado los 30 minutos.
+document.addEventListener("visibilitychange", () => { if (!document.hidden) consultarClima(); });
+window.addEventListener("online", () => consultarClima(true));
+
+/* ---------- 11. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
@@ -630,6 +800,11 @@ crearPersonaje(alcalde, "alcalde", ayuntamiento.x, ayuntamiento.y + 0.10);
 crearPersonaje(segundo, "tanuki", ayuntamiento.x + 0.09, ayuntamiento.y + 0.10);
 
 actualizarReloj();
+dibujarBuzon();
+guardarMemoria();
+actualizarEstadoMemoria();
+consultarClima();
+setInterval(() => consultarClima(), INTERVALO_CLIMA);
 
 // Cada segundo real: si el avance rápido está activo, la hora corre
 // (un día en 2 minutos); si no, solo refrescamos el reloj.
@@ -658,7 +833,8 @@ if (location.hash === "#buzon" || location.hash === "#buzoncerrado") {
 if (location.hash === "#ficha") mostrarFicha("Tanuki");
 if (location.hash.startsWith("#h")) {
   modoRapido = true;
-  horaSimulada = parseFloat(location.hash.slice(2)) || 12;
+  const horaDePrueba = parseFloat(location.hash.slice(2));
+  horaSimulada = Number.isFinite(horaDePrueba) ? ((horaDePrueba % 24) + 24) % 24 : 12;
   botonAvance.classList.add("activo");
   actualizarReloj();
 }
