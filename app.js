@@ -11,7 +11,26 @@
      8. El buzón de avisos 📬
      9. Memoria local
     10. Clima real de Bizkaia
-    11. Arranque
+    11. Ideas locales de los vecinos
+    12. Avisos reales (avisos.json, escritos por Instinct)
+    13. Arranque
+   ==================================================
+
+   FORMATO DE avisos.json (lo escribe Instinct a mano, mismo directorio):
+   {
+     "avisos": [
+       {
+         "id": "cita-osakidetza-2026-11-20",   // obligatorio, ÚNICO: no repetir nunca
+         "agente": "yuki",                     // oni | kitsune | yuki | tengu | kappa
+         "texto": "Mañana tienes cita en Osakidetza a las 10:30.",
+         "fecha": "2026-11-19T18:00:00+01:00"  // opcional (si falta, se usa la de llegada)
+       }
+     ]
+   }
+   Reglas: el texto se pinta como TEXTO, nunca como HTML; los avisos con
+   un id ya recibido se ignoran (no se duplican aunque el archivo siga
+   sirviéndolos); si el archivo falta, está vacío o es JSON roto, el
+   pueblo sigue funcionando sin que se note.
    ==================================================
 
    Idea importante: TODAS las posiciones se guardan como
@@ -29,6 +48,15 @@
 
 
 /* ---------- 1. LOS DATOS DEL PUEBLO ---------- */
+
+// Trucos de pruebas: trozos de la almohadilla de la dirección, combinables
+// (p. ej. "#h10#manana-lluvia"). Se usan al final, en la sección 13, y en
+// el clima (sección 10). En la vida real la dirección no lleva ninguno.
+const trucos = new Set(location.hash.split("#").filter(Boolean));
+function trucoConPrefijo(prefijo) {
+  for (const truco of trucos) if (truco.startsWith(prefijo)) return truco.slice(prefijo.length);
+  return null;
+}
 
 // El ayuntamiento: la casa del alcalde. Es más grande que las demás.
 const ayuntamiento = {
@@ -453,38 +481,53 @@ mapa.addEventListener("click", cerrarFicha);
 // algo que contar, NO molestan al alcalde directamente. Enseñan su aviso 💬
 // y Tanuki (el segundo) va a por él, lo recoge y se lo lleva al alcalde.
 //
-// OJO: de momento los avisos son DE EJEMPLO (salen solos de vez en cuando
-// para ver el recorrido). Cuando conectemos los temas de verdad, cada
-// aviso vendrá de lo que pase en la vida real del alcalde.
+// Los avisos ya NO son de ejemplo. Salen de dos sitios:
+//   - las ideas locales de los vecinos (sección 11: clima real, hora y día);
+//   - los avisos reales que Instinct escribe en avisos.json (sección 12).
+// Ambos entran en la COLA de avisos y Tanuki los entrega de uno en uno.
 
 // El aviso en marcha, o null si no hay ninguno.
 // Fases: "emitido" (el agente lo tiene) → "recogido" (Tanuki lo tiene)
 // → se entrega al alcalde y desaparece.
 let aviso = null;
-let avisoTema = ""; // el tema del último aviso, para el cartelito de entrega
+
+// La cola de avisos pendientes de entregar. Cada uno:
+// { agente (personaje), texto, id (único, para no repetir), fecha }
+const colaAvisos = [];
 
 // Pasos que le queda al alcalde leyendo su aviso (0 = ninguno).
 let avisoParaAlcalde = 0;
 
-// Contador para que los avisos salgan de vez en cuando (no a chorro).
+// Pausa entre una entrega y la siguiente, para que no lleguen a chorro.
 // El primero sale pronto, para que se vea el recorrido nada más abrir la web.
 let ticksHastaAviso = 200; // ~10 segundos
 
-// ¿Sale un aviso nuevo? Solo de día (los agentes trabajan de 8 a 21).
+// Mete un aviso en la cola (o directo al buzón con el truco "#directo").
+// Los que tienen id ya recibido o ya encolado se ignoran: jamás se repiten.
+// "prioritario" lo pone el primero de la cola (avisos reales antes que ideas).
+function encolarAviso(agentePersonaje, texto, id, fecha, prioritario) {
+  const yaExiste = id && (avisosRecibidos.some(a => a.id === id) ||
+    colaAvisos.some(a => a.id === id) || (aviso && aviso.id === id));
+  if (yaExiste) return;
+  const nuevo = { agente: agentePersonaje, texto: texto, id: id || null, fecha: fecha || null };
+  if (trucos.has("directo")) { guardarEnBuzon(nuevo); return; }
+  if (prioritario) colaAvisos.unshift(nuevo); else colaAvisos.push(nuevo);
+}
+
+// ¿Entregamos el siguiente aviso de la cola? Solo de día (de 8 a 23),
+// que es cuando los vecinos y el alcalde están despiertos.
 function pensandoAviso() {
-  if (aviso) return;
+  if (aviso || colaAvisos.length === 0) return;
   ticksHastaAviso--;
   if (ticksHastaAviso > 0) return;
 
   const hora = horaDelPueblo();
-  if (hora >= 8 && hora < 21) {
-    // Elegimos un agente al azar y le ponemos el aviso
-    const quienes = personajes.filter(p => p.tipo === "agente");
-    const elegido = quienes[Math.floor(Math.random() * quienes.length)];
-    aviso = { agente: elegido, fase: "emitido" };
+  if (hora >= 8 && hora < 23) {
+    aviso = colaAvisos.shift();
+    aviso.fase = "emitido";
   }
-  // Tanto si sale como si no, el próximo se intenta en 1-2 minutos
-  ticksHastaAviso = 1200 + Math.floor(Math.random() * 1200);
+  // La siguiente entrega: en 45-75 segundos (casi nada con el truco "#rapido")
+  ticksHastaAviso = trucos.has("rapido") ? 40 : 900 + Math.floor(Math.random() * 600);
 }
 
 // La misión de Tanuki cuando hay aviso. Devuelve el punto al que debe ir,
@@ -499,7 +542,7 @@ function misionDeTanuki(p) {
     const destino = { x: aviso.agente.x, y: aviso.agente.y };
     if (estaCerca(p, destino)) {
       aviso.fase = "recogido";
-      mostrarAviso("🍃 Tanuki recoge un aviso de " + aviso.agente.datos.tema + " (de ejemplo)");
+      mostrarAviso("🍃 Tanuki recoge un aviso de " + aviso.agente.datos.nombre + " (" + aviso.agente.datos.tema + ")");
     }
     return destino;
   }
@@ -511,11 +554,11 @@ function misionDeTanuki(p) {
     const destino = { x: alcaldeP.x, y: alcaldeP.y };
     if (estaCerca(p, destino)) {
       // Entrega hecha: el alcalde se pone a leerlo un rato
-      avisoTema = aviso.agente.datos.tema;
-      guardarEnBuzon(aviso.agente); // se guarda en el buzón 📬
+      guardarEnBuzon(aviso); // se guarda en el buzón 📬
+      const nombreAgente = aviso.agente.datos.nombre;
       aviso = null;
       avisoParaAlcalde = 240; // ~12 segundos
-      mostrarAviso("👑 El alcalde lee el aviso de " + avisoTema + " que le trae Tanuki (de ejemplo)");
+      mostrarAviso("👑 El alcalde lee el aviso de " + nombreAgente + " que le trae Tanuki");
     }
     return destino;
   }
@@ -544,21 +587,13 @@ function mostrarAviso(texto) {
 /* ---------- 8. EL BUZÓN DE AVISOS 📬 ---------- */
 
 // Cuando Tanuki entrega un aviso, se guarda aquí para que el alcalde
-// pueda leerlo entero cuando quiera. De momento los textos son de EJEMPLO.
-
-// Un texto de ejemplo por tema (más adelante vendrán de datos reales).
-const textosDeEjemplo = {
-  ejercicio:     "Hoy toca entrenar. (Aviso de ejemplo: aquí irá tu rutina de ejercicio.)",
-  gastos:        "Este mes llevas un gasto alto en ocio. (Aviso de ejemplo: aquí irán tus gastos reales.)",
-  recordatorios: "No olvides tu cita de mañana a las 10:00. (Aviso de ejemplo.)",
-  trabajo:       "Hay una oferta nueva de camarero cerca de ti. (Aviso de ejemplo: aquí irán las ofertas reales.)",
-  comidas:       "Hoy toca cenar algo ligero. (Aviso de ejemplo: aquí irá tu plan de comidas.)",
-};
+// pueda leerlo entero cuando quiera. Los textos ya son de verdad: ideas
+// de los vecinos (sección 11) y avisos de Instinct (sección 12).
 
 // La lista de avisos recibidos (el más nuevo primero).
 const CLAVE_MEMORIA = "yokai-town-memoria-v1";
 // Los atajos de demostración no escriben sobre el buzón real.
-const pruebaBuzon = ["#buzon", "#buzoncerrado"].includes(location.hash);
+const pruebaBuzon = trucos.has("buzon") || trucos.has("buzoncerrado");
 let memoriaDisponible = true;
 const memoriaInicial = cargarMemoria();
 const avisosRecibidos = pruebaBuzon ? [] : memoriaInicial.avisos;
@@ -570,17 +605,22 @@ const listaBuzon = document.getElementById("buzon-lista");
 const buzonVacio = document.getElementById("buzon-vacio");
 
 // Guarda un aviso en el buzón (lo llama Tanuki al entregarlo).
-function guardarEnBuzon(agente) {
+// Si el aviso tiene id y ya estaba, no se guarda dos veces.
+function guardarEnBuzon(avisoEntregado) {
+  if (avisoEntregado.id && avisosRecibidos.some(a => a.id === avisoEntregado.id)) return;
   const hora = document.getElementById("hora").textContent; // la hora del pueblo
   avisosRecibidos.unshift({
+    id: avisoEntregado.id || null,
     hora: hora,
-    fecha: new Date().toISOString(),
-    agente: agente.datos.nombre,
-    emoji: agente.datos.emoji,
-    tema: agente.datos.tema,
-    texto: textosDeEjemplo[agente.datos.tema],
+    fecha: avisoEntregado.fecha || new Date().toISOString(),
+    agente: avisoEntregado.agente.datos.nombre,
+    emoji: avisoEntregado.agente.datos.emoji,
+    tema: avisoEntregado.agente.datos.tema,
+    texto: avisoEntregado.texto,
     leido: false,
   });
+  // Como mucho guardamos los 100 avisos más recientes.
+  if (avisosRecibidos.length > 100) avisosRecibidos.length = 100;
   guardarMemoria();
   dibujarBuzon();
 }
@@ -649,7 +689,10 @@ function cargarMemoria() {
     if (!datos || datos.version !== 1 || !Array.isArray(datos.avisos)) return limpia;
     const avisos = datos.avisos.filter(a => a &&
       ["hora", "agente", "emoji", "tema", "texto"].every(campo => typeof a[campo] === "string") &&
-      typeof a.leido === "boolean").map(a => ({
+      typeof a.leido === "boolean" &&
+      // Limpieza: los avisos de ejemplo de la versión anterior se descartan.
+      !a.texto.includes("de ejemplo")).map(a => ({
+        id: typeof a.id === "string" ? a.id : null,
         hora: a.hora, agente: a.agente, emoji: a.emoji, tema: a.tema,
         texto: a.texto, leido: a.leido,
         fecha: typeof a.fecha === "string" && Number.isFinite(Date.parse(a.fecha)) ? a.fecha : null,
@@ -687,7 +730,18 @@ function actualizarEstadoMemoria() {
 
 // Un punto fijo cerca de Santurtzi / Portugalete. No pedimos tu ubicación.
 // Documentación de códigos WMO: https://open-meteo.com/en/docs
-const URL_CLIMA = "https://api.open-meteo.com/v1/forecast?latitude=43.33&longitude=-3.03&current=temperature_2m%2Cweather_code&timezone=Europe%2FMadrid&temperature_unit=celsius";
+const URL_CLIMA = "https://api.open-meteo.com/v1/forecast?latitude=43.33&longitude=-3.03&current=temperature_2m%2Cweather_code&daily=weather_code&forecast_days=2&timezone=Europe%2FMadrid&temperature_unit=celsius";
+// Así sabe el pueblo también el tiempo de MAÑANA (para ideas tipo "mañana llueve").
+// Trucos de prueba: "#clima-lluvia" simula el tiempo de hoy y
+// "#manana-nieve" el de mañana (sol, parcial, nubes, niebla, lluvia, nieve).
+const CLIMAS_DE_PRUEBA = {
+  sol: { tipo: "sol", icono: "☀️", texto: "Despejado" },
+  parcial: { tipo: "parcial", icono: "🌤️", texto: "Sol y nubes" },
+  nubes: { tipo: "nubes", icono: "☁️", texto: "Nublado" },
+  niebla: { tipo: "niebla", icono: "🌫️", texto: "Niebla" },
+  lluvia: { tipo: "lluvia", icono: "🌧️", texto: "Lluvia" },
+  nieve: { tipo: "nieve", icono: "❄️", texto: "Nieve" },
+};
 const INTERVALO_CLIMA = 30 * 60 * 1000;
 const capaClima = document.getElementById("capa-clima");
 const textoClima = document.getElementById("clima-actual");
@@ -753,20 +807,38 @@ async function consultarClima(forzar = false) {
     if (!respuesta.ok) throw new Error("Sin datos");
     const datos = await respuesta.json();
     const actual = datos.current;
-    const clima = actual && tipoDeClima(actual.weather_code);
-    if (!clima || !Number.isFinite(actual.temperature_2m)) throw new Error("Datos incompletos");
+    const climaTrucado = CLIMAS_DE_PRUEBA[trucoConPrefijo("clima-")];
+    const clima = climaTrucado || (actual && tipoDeClima(actual.weather_code));
+    if (!clima || (!climaTrucado && !Number.isFinite(actual.temperature_2m))) throw new Error("Datos incompletos");
+    const temperatura = actual && Number.isFinite(actual.temperature_2m) ? actual.temperature_2m : 15;
+    // El tiempo de mañana (segundo día del forecast) alimenta las ideas.
+    const codigoManana = datos.daily && Array.isArray(datos.daily.weather_code) ? datos.daily.weather_code[1] : null;
+    const climaManana = codigoManana !== null ? tipoDeClima(codigoManana) : null;
+    climaParaIdeas = { tipo: clima.tipo, temperatura: temperatura };
+    climaMananaParaIdeas = CLIMAS_DE_PRUEBA[trucoConPrefijo("manana-")] ? CLIMAS_DE_PRUEBA[trucoConPrefijo("manana-")].tipo : (climaManana ? climaManana.tipo : null);
     dibujarClima(clima);
-    textoClima.textContent = `${clima.icono} Bizkaia · ${clima.texto} · ${Math.round(actual.temperature_2m)} °C`;
+    textoClima.textContent = `${clima.icono} Bizkaia · ${clima.texto} · ${Math.round(temperatura)} °C${climaTrucado ? " (simulado)" : ""}`;
     const hora = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
     detalleClima.textContent = `Santurtzi / Portugalete · Consultado ${hora} · Cada 30 min`;
   } catch (error) {
     // Sin conexión, sin aviso molesto ni clima antiguo presentado como actual.
-    dibujarClima(null);
-    textoClima.textContent = "🌿 Bizkaia · Clima tranquilo";
+    // (Con el truco "#clima-..." se simula incluso sin conexión, para pruebas.)
+    const climaTrucado = CLIMAS_DE_PRUEBA[trucoConPrefijo("clima-")];
+    if (climaTrucado) {
+      climaParaIdeas = { tipo: climaTrucado.tipo, temperatura: 15 };
+      dibujarClima(climaTrucado);
+      textoClima.textContent = `${climaTrucado.icono} Bizkaia · ${climaTrucado.texto} (simulado)`;
+    } else {
+      dibujarClima(null);
+      textoClima.textContent = "🌿 Bizkaia · Clima tranquilo";
+    }
     detalleClima.textContent = "Santurtzi / Portugalete · Tiempo real en pausa";
+    const mananaTrucado = CLIMAS_DE_PRUEBA[trucoConPrefijo("manana-")];
+    if (mananaTrucado) climaMananaParaIdeas = mananaTrucado.tipo;
   } finally {
     clearTimeout(limite);
     consultandoClima = false;
+    generarIdeasDelDia(); // la primera consulta (salga bien o mal) dispara las ideas
   }
 }
 
@@ -780,7 +852,171 @@ menosMovimiento.addEventListener("change", () => {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) consultarClima(); });
 window.addEventListener("online", () => consultarClima(true));
 
-/* ---------- 11. ARRANQUE ---------- */
+/* ---------- 11. IDEAS LOCALES DE LOS VECINOS ---------- */
+
+// Cada vecino piensa con lo que la app sabe DE VERDAD: el tiempo real de
+// Bizkaia (hoy y mañana), la hora y el día de la semana. Nada se inventa
+// de la vida del alcalde: si una idea necesita un dato que no tenemos,
+// simplemente no se propone.
+
+let ideasGeneradas = false;
+let climaParaIdeas = null;       // { tipo, temperatura } del tiempo actual
+let climaMananaParaIdeas = null; // tipo del tiempo de mañana (o null)
+
+// Un número estable a partir de un texto. Sirve para que cada día salgan
+// ideas distintas, pero LAS MISMAS durante todo el día (no cambian al recargar).
+function hashTexto(texto) {
+  let h = 0;
+  for (const letra of texto) h = (h * 31 + letra.codePointAt(0)) >>> 0;
+  return h;
+}
+
+// Las ideas de cada vecino. "cuando" mira el contexto y decide si la idea
+// aplica hoy; de las que aplican se elige una al azar estable del día.
+// Contexto: { climaHoy, climaManana, temperatura, hora, diaSemana (0=domingo), diaDelMes }
+const ideasPorTema = {
+  ejercicio: [
+    { clave: "lluvia-hoy", cuando: c => c.climaHoy === "lluvia",
+      texto: "Hoy llueve en Bizkaia: mejor entrenar en casa o en el gimnasio. 30 minutos de rutina sin material también cuentan." },
+    { clave: "lluvia-manana", cuando: c => c.climaManana === "lluvia" && c.climaHoy !== "lluvia",
+      texto: "Mañana llueve en Bizkaia: si quieres entrenar al aire libre, hazlo hoy." },
+    { clave: "nieve-hoy", cuando: c => c.climaHoy === "nieve",
+      texto: "Hoy nieva: entrena dentro de casa y calienta unos minutos más de lo normal." },
+    { clave: "buen-dia", cuando: c => ["sol", "parcial"].includes(c.climaHoy) && c.temperatura >= 12 && c.temperatura <= 26,
+      texto: "Hace buen día: aprovecha para correr o caminar junto a la ría." },
+    { clave: "lunes", cuando: c => c.diaSemana === 1,
+      texto: "Lunes: entrena a primera hora y la semana empieza ganada." },
+    { clave: "finde", cuando: c => c.diaSemana === 0 || c.diaSemana === 6,
+      texto: "Fin de semana: una caminata larga por la costa también es entrenar." },
+    { clave: "base", cuando: () => true,
+      texto: "Idea de hoy: 20 minutos de ejercicio, aunque sea andando rápido. Lo importante es no romper la racha." },
+  ],
+  gastos: [
+    { clave: "lunes", cuando: c => c.diaSemana === 1,
+      texto: "Lunes: repasa lo que gastaste el fin de semana mientras lo tienes fresco." },
+    { clave: "viernes", cuando: c => c.diaSemana === 5,
+      texto: "Viernes: decide ahora cuánto quieres gastar este finde y apúntalo. El lunes lo agradecerás." },
+    { clave: "principio-mes", cuando: c => c.diaDelMes <= 3,
+      texto: "Principio de mes: buen momento para revisar suscripciones y gastos fijos." },
+    { clave: "lluvia-finde", cuando: c => (c.diaSemana === 0 || c.diaSemana === 6) && c.climaHoy === "lluvia",
+      texto: "Finde de lluvia: plan en casa (peli y algo rico de cocinar) y te ahorras el gasto de fuera." },
+    { clave: "base", cuando: () => true,
+      texto: "Idea de hoy: apunta todos los gastos pequeños del día. Los cafés y los antojos son los que más suman a final de mes." },
+  ],
+  recordatorios: [
+    { clave: "manana", cuando: c => c.hora >= 8 && c.hora < 11,
+      texto: "Buenos días: escribe ahora las 3 cosas importantes de hoy, antes de que se te olviden." },
+    { clave: "domingo", cuando: c => c.diaSemana === 0,
+      texto: "Domingo: apunta ya las citas y tareas de la semana que empieza mañana." },
+    { clave: "lunes", cuando: c => c.diaSemana === 1,
+      texto: "Lunes: revisa las citas de esta semana y pon avisos en el móvil." },
+    { clave: "base", cuando: () => true,
+      texto: "Idea de hoy: dedica 5 minutos a ordenar las notas y los recordatorios del móvil." },
+  ],
+  trabajo: [
+    { clave: "lunes", cuando: c => c.diaSemana === 1,
+      texto: "Lunes: las ofertas nuevas de camarero suelen salir a primeros de semana. Revisa hoy JobToday e InfoJobs." },
+    { clave: "lluvia-manana", cuando: c => c.climaManana === "lluvia",
+      texto: "Mañana llueve: los bares con terraza necesitarán gente dentro. Buen día para preguntar en persona." },
+    { clave: "media-manana", cuando: c => c.hora >= 10 && c.hora < 12 && c.diaSemana >= 1 && c.diaSemana <= 5,
+      texto: "A esta hora los bares están tranquilos entre servicios: buen momento para acercarte con el CV." },
+    { clave: "viernes", cuando: c => c.diaSemana === 5,
+      texto: "Viernes: los bares buscan refuerzo para el finde. Hoy es buen día para llamar o pasarte a preguntar." },
+    { clave: "base", cuando: () => true,
+      texto: "Idea de hoy: ten el CV actualizado y a mano en el móvil para enviarlo en cuanto salga una oferta." },
+  ],
+  comidas: [
+    { clave: "lluvia", cuando: c => c.climaHoy === "lluvia",
+      texto: "Día de lluvia: apetece algo caliente. Cocinar en casa (una crema, un pisto) además sale más barato." },
+    { clave: "mediodia", cuando: c => c.hora >= 12 && c.hora < 14,
+      texto: "Se acerca la hora de comer: si cocinas hoy, deja hecho extra y mañana ya tienes." },
+    { clave: "tarde", cuando: c => c.hora >= 17 && c.hora < 20,
+      texto: "Ve pensando la cena: algo ligero y temprano sienta mejor para dormir." },
+    { clave: "sol-finde", cuando: c => (c.diaSemana === 0 || c.diaSemana === 6) && ["sol", "parcial"].includes(c.climaHoy),
+      texto: "Hace bueno: si te apetece comer fuera, hoy la terraza está garantizada." },
+    { clave: "base", cuando: () => true,
+      texto: "Idea de hoy: prepara un tentempié sano (fruta o frutos secos) para no picar cualquier cosa." },
+  ],
+};
+
+// Se llaman una vez al día (tras la primera consulta del clima): cada vecino
+// elige su idea de hoy y la pone en la cola para que Tanuki la entregue.
+function generarIdeasDelDia() {
+  if (ideasGeneradas) return;
+  ideasGeneradas = true;
+  if (trucos.has("sinideas")) return; // truco de pruebas: solo avisos reales
+
+  const ahora = new Date();
+  const hora = horaDelPueblo();
+  if (hora < 8 || hora >= 21) return; // de noche los vecinos no dan ideas
+
+  // La fecha local de hoy (aaaa-mm-dd): forma parte del id de cada idea,
+  // así una idea entregada hoy no se repite aunque recargues la página.
+  const fecha = ahora.getFullYear() + "-" +
+    String(ahora.getMonth() + 1).padStart(2, "0") + "-" +
+    String(ahora.getDate()).padStart(2, "0");
+
+  const diaTrucado = trucoConPrefijo("dia-");
+  const contexto = {
+    climaHoy: climaParaIdeas ? climaParaIdeas.tipo : null,
+    climaManana: climaMananaParaIdeas,
+    temperatura: climaParaIdeas ? climaParaIdeas.temperatura : null,
+    hora: hora,
+    diaSemana: diaTrucado !== null ? parseInt(diaTrucado, 10) : ahora.getDay(),
+    diaDelMes: ahora.getDate(),
+  };
+
+  for (const datos of agentes) {
+    const candidatas = (ideasPorTema[datos.tema] || []).filter(idea => idea.cuando(contexto));
+    if (candidatas.length === 0) continue;
+    const elegida = candidatas[hashTexto(fecha + "-" + datos.tema) % candidatas.length];
+    const personaje = personajes.find(p => p.tipo === "agente" && p.datos === datos);
+    if (personaje) {
+      encolarAviso(personaje, elegida.texto, "idea-" + fecha + "-" + datos.tema + "-" + elegida.clave, null, false);
+    }
+  }
+}
+
+
+/* ---------- 12. AVISOS REALES (avisos.json) ---------- */
+
+// Instinct escribe los avisos de la vida real del alcalde en un archivo
+// avisos.json (mismo directorio que esta web; formato documentado arriba).
+// La app lo descarga al abrir y cada 10 minutos, y mete los avisos nuevos
+// los primeros de la cola, para que Tanuki los entregue cuanto antes.
+const URL_AVISOS = "avisos.json";
+const INTERVALO_AVISOS = 10 * 60 * 1000;
+
+async function consultarAvisosReales() {
+  if (document.hidden) return;
+  const control = new AbortController();
+  const limite = setTimeout(() => control.abort(), 10000);
+  try {
+    const respuesta = await fetch(URL_AVISOS, { signal: control.signal, cache: "no-store", credentials: "omit" });
+    if (!respuesta.ok) throw new Error("Sin avisos");
+    const datos = await respuesta.json();
+    const lista = datos && Array.isArray(datos.avisos) ? datos.avisos : [];
+    for (const item of lista) {
+      // Validación: sin id único, sin texto o sin vecino conocido, se ignora.
+      if (!item || typeof item.id !== "string" || !item.id.trim()) continue;
+      if (typeof item.texto !== "string" || !item.texto.trim()) continue;
+      const datosAgente = agentes.find(a => a.nombre.toLowerCase() === String(item.agente).toLowerCase().trim());
+      if (!datosAgente) continue;
+      const personaje = personajes.find(p => p.tipo === "agente" && p.datos === datosAgente);
+      if (!personaje) continue;
+      const fecha = typeof item.fecha === "string" && Number.isFinite(Date.parse(item.fecha)) ? item.fecha : null;
+      // "real-" + id: no choca con los id de las ideas locales.
+      encolarAviso(personaje, item.texto.trim(), "real-" + item.id.trim(), fecha, true);
+    }
+  } catch (error) {
+    // Sin archivo, sin conexión o JSON roto: el pueblo sigue igual.
+  } finally {
+    clearTimeout(limite);
+  }
+}
+
+
+/* ---------- 13. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
@@ -806,6 +1042,15 @@ actualizarEstadoMemoria();
 consultarClima();
 setInterval(() => consultarClima(), INTERVALO_CLIMA);
 
+// Los avisos reales se buscan al abrir y cada 10 minutos.
+consultarAvisosReales();
+setInterval(consultarAvisosReales, INTERVALO_AVISOS);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) consultarAvisosReales(); });
+
+// Red de seguridad: si la primera consulta del clima se atascara del todo,
+// las ideas del día salen igual a los 12 segundos (con clima neutro).
+setTimeout(generarIdeasDelDia, 12000);
+
 // Cada segundo real: si el avance rápido está activo, la hora corre
 // (un día en 2 minutos); si no, solo refrescamos el reloj.
 setInterval(() => {
@@ -816,25 +1061,24 @@ setInterval(() => {
 // Y el juego da un paso 20 veces por segundo
 setInterval(pasoDelJuego, 50);
 
-// Trucos de pruebas:
-// - Abrir la página terminada en "#ficha" muestra la ficha de Tanuki.
-// - Terminada en "#h14" (o la hora que sea), activa el avance rápido
-//   empezando a esa hora, para probar cualquier momento del día.
-// - Terminada en "#buzon", el buzón se abre con avisos de ejemplo
-//   ("#buzoncerrado" los pone pero con el buzón cerrado).
-if (location.hash === "#buzon" || location.hash === "#buzoncerrado") {
-  for (const nombre of ["Kitsune", "Tengu", "Oni"]) {
-    guardarEnBuzon(personajes.find(p => p.datos.nombre === nombre));
-  }
-  avisosRecibidos[2].leido = true;
-  dibujarBuzon();
-  if (location.hash === "#buzon") panelBuzon.classList.remove("oculta");
-}
-if (location.hash === "#ficha") mostrarFicha("Tanuki");
-if (location.hash.startsWith("#h")) {
+// Trucos de pruebas (se combinan con #, p. ej. "#h10#manana-lluvia#buzon"):
+// - "#ficha" muestra la ficha de Tanuki.
+// - "#h14" (o la hora que sea) activa el avance rápido empezando a esa hora.
+// - "#buzon" abre el buzón (y "#buzoncerrado" solo desactiva el guardado,
+//   para que las pruebas no escriban en la memoria real).
+// - "#abrebuzon" abre el buzón SIN desactivar el guardado.
+// - "#sinideas" no genera ideas locales (para probar solo los avisos reales).
+// - "#clima-lluvia" simula el tiempo de hoy; "#manana-nieve" el de mañana
+//   (valores: sol, parcial, nubes, niebla, lluvia, nieve).
+// - "#dia-5" simula el día de la semana (0 = domingo ... 6 = sábado).
+// - "#rapido" entrega los avisos en cola con muy poca espera entre ellos.
+// - "#directo" manda los avisos al buzón sin el paseo de Tanuki.
+if (trucos.has("buzon") || trucos.has("abrebuzon")) panelBuzon.classList.remove("oculta");
+if (trucos.has("ficha")) mostrarFicha("Tanuki");
+const trucoHora = trucoConPrefijo("h");
+if (trucoHora !== null && Number.isFinite(parseFloat(trucoHora))) {
   modoRapido = true;
-  const horaDePrueba = parseFloat(location.hash.slice(2));
-  horaSimulada = Number.isFinite(horaDePrueba) ? ((horaDePrueba % 24) + 24) % 24 : 12;
+  horaSimulada = ((parseFloat(trucoHora) % 24) + 24) % 24;
   botonAvance.classList.add("activo");
   actualizarReloj();
 }
