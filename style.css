@@ -8,6 +8,9 @@
      5. Ficha del personaje
      6. Día y noche
      7. Móvil (pantallas pequeñas)
+     8. El buzón de avisos
+     9. Clima real y memoria
+    10. Las charlas entre vecinos
    ================================================== */
 
 /* ---------- 1. GENERAL Y CABECERA ---------- */
@@ -242,6 +245,42 @@ body {
   pointer-events: none;
 }
 
+/* El bocadillo de las charlas (sección 13 de app.js).
+   Sale encima del personaje que está hablando. */
+.charla {
+  position: absolute;
+  bottom: 108%;                /* justo encima de la cabeza */
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 150px;            /* frases cortas, bocadillo pequeño */
+  background: #fffef5;
+  color: #333;
+  font-size: 0.62rem;
+  line-height: 1.25;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;        /* no estorba al tocar al personaje */
+  z-index: 7;
+}
+
+/* El piquito del bocadillo, apuntando al que habla.
+   app.js lo mueve con --cola-x cuando el bocadillo hay que
+   empujarlo hacia dentro para que no se salga del mapa. */
+.charla::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: var(--cola-x, 50%);
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #fffef5;
+}
+
+.charla.oculta { display: none; }
+
 /* ---------- 5. FICHA DEL PERSONAJE ---------- */
 
 #ficha {
@@ -340,10 +379,15 @@ body.de-noche {
   .casa .cartel {
     font-size: 0.55rem;
   }
+
+  .charla {
+    max-width: 130px;
+    font-size: 0.6rem;
+  }
 }
 
 
-/* ---------- 7. EL BUZÓN DE AVISOS ---------- */
+/* ---------- 8. EL BUZÓN DE AVISOS ---------- */
 
 /* El botón 📬 de la cabecera, con su contador de no leídos */
 #boton-buzon {
@@ -429,7 +473,7 @@ body.de-noche {
 }
 .aviso-item.no-leido { background: #ffe9a8; }
 
-/* ---------- 8. CLIMA REAL Y MEMORIA ---------- */
+/* ---------- 9. CLIMA REAL Y MEMORIA ---------- */
 #barra-clima, #memoria-pueblo {
   width: min(96vw, 900px);
   display: flex;
