@@ -15,7 +15,8 @@
     12. Avisos reales (avisos.json, escritos por Instinct)
     13. Las charlas entre vecinos 💬
     14. El mercadillo del sábado 🧺
-    15. Arranque
+    15. Los festivales yokai 🌸👹🎆
+    16. Arranque
    ==================================================
 
    FORMATO DE avisos.json (lo escribe Instinct a mano, mismo directorio):
@@ -310,7 +311,8 @@ function rutina(p, hora) {
     if (hora < 13) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Firmando papeles del pueblo", burbuja: "📜" }) };
     if (hora < 15) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
     if (hora < 20) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Atendiendo a los vecinos", burbuja: "🗣️" }) };
-    return actividadDelBar(p.numero);
+    // La noche de los fuegos artificiales no hay izakaya: la plaza (sección 15).
+    return esNocheDeFuegos() ? viendoLosFuegos(p) : actividadDelBar(p.numero);
   }
 
   // --- Tanuki, el segundo al mando ---
@@ -319,7 +321,7 @@ function rutina(p, hora) {
   if (p.tipo === "tanuki") {
     const suSitio = { x: ayuntamiento.x + 0.09, y: ayuntamiento.y + 0.10 };
     if (hora >= HORA_DORMIR || hora < 8) return { zona: suSitio, quieto: true, texto: "Descansando 😴", burbuja: "💤" };
-    if (hora >= HORA_BAR) return actividadDelBar(p.numero);
+    if (hora >= HORA_BAR) return esNocheDeFuegos() ? viendoLosFuegos(p) : actividadDelBar(p.numero);
     if (hora >= 13 && hora < 14) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
     // Los sábados Tanuki también baja al mercadillo (si hay un aviso, la
     // sección 7 sigue mandando: eso va primero).
@@ -344,7 +346,7 @@ function rutina(p, hora) {
   if (hora < 14) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...trabajo };
   if (hora < 16) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
   if (hora < 20) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...trabajo };
-  return actividadDelBar(p.numero);
+  return esNocheDeFuegos() ? viendoLosFuegos(p) : actividadDelBar(p.numero);
 }
 
 // Un punto al azar cerca de una zona (para que no se queden clavados).
@@ -1204,7 +1206,7 @@ function buscarParejaParaCharla() {
     for (let j = i + 1; j < libres.length; j++) {
       const dx = libres[i].x - libres[j].x;
       const dy = libres[i].y - libres[j].y;
-      const distanciaMaxima = esMercadillo() ? DISTANCIA_CHARLA_MERCADILLO : DISTANCIA_CHARLA;
+      const distanciaMaxima = (esMercadillo() || esNocheDeFuegos()) ? DISTANCIA_CHARLA_MERCADILLO : DISTANCIA_CHARLA;
       if (Math.sqrt(dx * dx + dy * dy) < distanciaMaxima) parejas.push([libres[i], libres[j]]);
     }
   }
@@ -1216,8 +1218,11 @@ function buscarParejaParaCharla() {
 function prepararCharla(a, b) {
   const hora = horaDelPueblo();
   const enElBar = hora >= HORA_BAR && hora < HORA_DORMIR;
-  const primera = enElBar ? elegirAlAzar(frasesBar)
+  const festival = festivalDeHoy();
+  const primera = esNocheDeFuegos() ? elegirAlAzar(frasesFuegos)
+    : enElBar ? elegirAlAzar(frasesBar)
     : esMercadillo() ? elegirAlAzar(frasesMercadillo)
+    : festival ? elegirAlAzar(frasesFestival[festival])
     : elegirAlAzar(frasesCharla[claveCharla(a)]);
   const segunda = enElBar && Math.random() < 0.5
     ? elegirAlAzar(respuestasBar)
@@ -1339,7 +1344,187 @@ function crearPuestos() {
 crearPuestos();
 
 
-/* ---------- 15. ARRANQUE ---------- */
+/* ---------- 15. LOS FESTIVALES YOKAI 🌸👹🎆 ---------- */
+
+// Tres fiestas al año alegran el pueblo, cada una en su fecha del
+// calendario real (mes-día):
+//   - El HANAMI 🌸 (del 25 de marzo al 14 de abril): los cerezos florecen
+//     alrededor de la plaza y sus pétalos caen sobre el pueblo.
+//   - El SETSUBUN 👹 (3 de febrero): se cuelgan máscaras de oni para
+//     espantar la mala suerte («¡fuera los onis, dentro la fortuna!»).
+//   - La NOCHE DE FUEGOS ARTIFICIALES 🎆 (15 de agosto): por la noche
+//     (de 20 a 23) nadie va a la izakaya: todo el pueblo se junta en la
+//     plaza a ver los fuegos estallar en el cielo.
+// Cada fiesta pone su cartelito arriba del mapa y sus frases de charla.
+// Para pruebas: "#fiesta-hanami", "#fiesta-setsubun" o "#fiesta-fuegos".
+const festivales = {
+  hanami: {
+    desde: "03-25", hasta: "04-14",
+    cartel: "🌸 Hoy es el hanami: los cerezos están en flor",
+  },
+  setsubun: {
+    desde: "02-03", hasta: "02-03",
+    cartel: "👹 Hoy es setsubun: ¡fuera los onis, dentro la fortuna!",
+  },
+  fuegos: {
+    desde: "08-15", hasta: "08-15",
+    cartel: "🎆 Hoy hay festival: esta noche, fuegos artificiales en la plaza",
+  },
+};
+
+// ¿Qué festival toca hoy? (null si no es día de fiesta)
+function festivalDeHoy() {
+  const trucado = trucoConPrefijo("fiesta-");
+  if (trucado && festivales[trucado]) return trucado;
+  const ahora = new Date();
+  const hoy = String(ahora.getMonth() + 1).padStart(2, "0") + "-" + String(ahora.getDate()).padStart(2, "0");
+  for (const [clave, fiesta] of Object.entries(festivales)) {
+    if (hoy >= fiesta.desde && hoy <= fiesta.hasta) return clave;
+  }
+  return null;
+}
+
+// ¿Estamos en la noche de los fuegos? (el 15 de agosto, de 20 a 23)
+function esNocheDeFuegos() {
+  const hora = horaDelPueblo();
+  return festivalDeHoy() === "fuegos" && hora >= HORA_BAR && hora < HORA_DORMIR;
+}
+
+// Los sitios para ver los fuegos: un corro alrededor de la fuente,
+// cada vecino en el suyo (igual que los sitios del bar, pero en la plaza).
+const sitiosFuegos = [];
+for (let numero = 0; numero < 7; numero++) {
+  const angulo = (numero / 7) * 2 * Math.PI + Math.PI / 7;
+  sitiosFuegos.push({
+    x: plaza.x + Math.cos(angulo) * 0.21,
+    y: plaza.y + Math.sin(angulo) * 0.21,
+  });
+}
+
+function viendoLosFuegos(p) {
+  return { zona: sitiosFuegos[p.numero], quieto: true, texto: "Viendo los fuegos artificiales en la plaza", burbuja: "🎆" };
+}
+
+// Los cerezos del hanami: florecen alrededor de la plaza y en dos
+// esquinas del pueblo (las posiciones de siempre no se tocan).
+const sakuras = [];
+for (let numero = 0; numero < 4; numero++) {
+  const angulo = (numero / 4) * 2 * Math.PI + Math.PI / 4;
+  sakuras.push({
+    x: plaza.x + Math.cos(angulo) * 0.245,
+    y: plaza.y + Math.sin(angulo) * 0.245,
+  });
+}
+sakuras.push({ x: 0.16, y: 0.14 }, { x: 0.84, y: 0.14 });
+
+// Las máscaras de oni del setsubun: una en cada esquina del pueblo.
+const mascarasSetsubun = [
+  { x: 0.10, y: 0.10 }, { x: 0.90, y: 0.10 },
+  { x: 0.10, y: 0.90 }, { x: 0.88, y: 0.90 },
+];
+
+// Las frases de cada fiesta (se usan en las charlas, sección 13).
+const frasesFestival = {
+  hanami: [
+    "Los cerezos solo florecen unos días. Hay que venir a verlos, oiga.",
+    "He traído la merienda a la plaza. El hanami manda.",
+    "Qué rosa está todo. Hasta el banco parece alegre.",
+    "Los pétalos caen como si no tuvieran prisa. Como debe ser.",
+    "Foto al cerezo, merienda y paseo. Plan perfecto.",
+    "Dicen que ver caer los pétalos da suerte. Yo no me muevo de aquí.",
+  ],
+  setsubun: [
+    "¡Fuera los onis, dentro la fortuna! Y que conste en acta.",
+    "He tirado las habas con tanta puntería que el oni ha aplaudido.",
+    "Cuidado con las habas: hoy volar es su trabajo.",
+    "Un año más, la mala suerte se va por donde ha venido.",
+    "Dicen que hay que comerse las habas de tu edad. Yo traigo la bolsa grande.",
+    "Las máscaras de las esquinas vigilan. Los onis ni se acercan.",
+  ],
+  fuegos: [
+    "¡Mira ese! ¡El rojo! ¡Qué bonito!",
+    "El pueblo entero en la plaza. Esto es lo mejor del verano.",
+    "El ruido de los fuegos asusta a los malos espíritus. Ya verás qué año.",
+    "Cada explosión es un deseo. Yo ya he pedido tres.",
+    "Qué suerte vivir en un pueblo con fuegos artificiales.",
+    "La fuente refleja los colores. Dos espectáculos por el precio de uno.",
+  ],
+};
+// La noche de los fuegos, las charlas van de fuegos (sección 13).
+const frasesFuegos = frasesFestival.fuegos;
+
+// Monta la decoración de la fiesta del día (si hay): cartelito, cerezos,
+// máscaras y pétalos. Los fuegos artificiales estallan aparte, de noche.
+function crearFestival() {
+  const festival = festivalDeHoy();
+  if (!festival) return;
+
+  // El cartelito de la fiesta, arriba del todo del mapa.
+  const cartel = document.createElement("div");
+  cartel.className = "cartel-festival " + festival;
+  cartel.textContent = festivales[festival].cartel;
+  colocar(cartel, 0.5, 0.035);
+  mapa.appendChild(cartel);
+
+  // La capa de los pétalos y los fuegos (no intercepta toques).
+  const capa = document.createElement("div");
+  capa.id = "capa-festival";
+  capa.setAttribute("aria-hidden", "true");
+  mapa.appendChild(capa);
+
+  if (festival === "hanami") {
+    for (const sitio of sakuras) {
+      const cerezo = document.createElement("div");
+      cerezo.className = "sakura";
+      cerezo.textContent = "🌸";
+      colocar(cerezo, sitio.x, sitio.y);
+      mapa.appendChild(cerezo);
+    }
+    // Los pétalos caen sobre el pueblo todo el día, como la nieve (sección 10).
+    for (let numero = 0; numero < 16; numero++) {
+      const petalo = document.createElement("span");
+      petalo.className = "petalo-hanami";
+      petalo.textContent = "🌸";
+      petalo.style.left = Math.random() * 100 + "%";
+      petalo.style.setProperty("--demora", -Math.random() * 9 + "s");
+      petalo.style.setProperty("--duracion", (6 + Math.random() * 5) + "s");
+      petalo.style.setProperty("--altura-quieta", Math.random() * 100 + "%");
+      capa.appendChild(petalo);
+    }
+  }
+
+  if (festival === "setsubun") {
+    for (const sitio of mascarasSetsubun) {
+      const mascara = document.createElement("div");
+      mascara.className = "mascara-setsubun";
+      mascara.textContent = "👹";
+      mascara.title = "Máscara de oni: espanta la mala suerte";
+      colocar(mascara, sitio.x, sitio.y);
+      mapa.appendChild(mascara);
+    }
+  }
+}
+
+// Los fuegos artificiales: cada poco tiempo estalla uno en el cielo del
+// pueblo, solo la noche del festival. Cada explosión se desvanece sola.
+setInterval(() => {
+  if (!esNocheDeFuegos()) return;
+  const capa = document.getElementById("capa-festival");
+  if (!capa) return;
+  const fuego = document.createElement("span");
+  fuego.className = "fuego-artificial";
+  fuego.textContent = elegirAlAzar(["🎆", "🎇", "✨"]);
+  fuego.style.left = (12 + Math.random() * 76) + "%";
+  fuego.style.top = (5 + Math.random() * 45) + "%";
+  capa.appendChild(fuego);
+  setTimeout(() => fuego.remove(), 2600);
+}, 1300);
+
+// Si hoy hay fiesta, montamos la decoración.
+crearFestival();
+
+
+/* ---------- 16. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
@@ -1402,6 +1587,8 @@ setInterval(pasoDelJuego, 50);
 // - "#charlas" hace que los vecinos charlen mucho más seguido (para pruebas).
 // - "#sincharlas" apaga las charlas por completo.
 // - "#dia-6" simula un sábado: sale el mercadillo con sus puestos (sección 14).
+// - "#fiesta-hanami", "#fiesta-setsubun" o "#fiesta-fuegos" simulan cada
+//   festival yokai (sección 15).
 if (trucos.has("buzon") || trucos.has("abrebuzon")) panelBuzon.classList.remove("oculta");
 if (trucos.has("ficha")) mostrarFicha("Tanuki");
 const trucoHora = trucoConPrefijo("h");
@@ -1410,4 +1597,4 @@ if (trucoHora !== null && Number.isFinite(parseFloat(trucoHora))) {
   horaSimulada = ((parseFloat(trucoHora) % 24) + 24) % 24;
   botonAvance.classList.add("activo");
   actualizarReloj();
-  }
+    }
