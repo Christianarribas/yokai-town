@@ -13,7 +13,8 @@
     10. Clima real de Bizkaia
     11. Ideas locales de los vecinos
     12. Avisos reales (avisos.json, escritos por Instinct)
-    13. Arranque
+    13. Las charlas entre vecinos 💬
+    14. Arranque
    ==================================================
 
    FORMATO DE avisos.json (lo escribe Instinct a mano, mismo directorio):
@@ -358,7 +359,8 @@ function crearPersonaje(datos, tipo, x, y) {
   const elemento = document.createElement("div");
   elemento.className = "personaje";
   elemento.style.setProperty("--color", datos.color);
-  elemento.innerHTML = `<span class="emoji">${datos.emoji}</span><span class="burbuja"></span>`;
+  // .burbuja es el icono de lo que hace; .charla, sus frases (sección 13)
+  elemento.innerHTML = `<span class="emoji">${datos.emoji}</span><span class="burbuja"></span><span class="charla oculta"></span>`;
 
   // Al tocarlo, mostramos su ficha (sección 6)
   elemento.addEventListener("click", (evento) => {
@@ -380,7 +382,9 @@ function crearPersonaje(datos, tipo, x, y) {
     espera: 0,            // pasos que le quedan parado antes de decidir otra vez
     numero: personajes.length, // para variar las actividades
     texto: "En casa",
+    charlando: false,     // true mientras está en una charla (sección 13): se queda quieto
   };
+  personaje.charla = elemento.querySelector(".charla");
   personajes.push(personaje);
   colocar(elemento, personaje.x, personaje.y);
 }
@@ -419,19 +423,21 @@ function pasoDelJuego() {
       p.espera = 40 + Math.floor(Math.random() * 120); // de 2 a 8 segundos parado
     }
 
-    // 3. Moverlo un trocito hacia su destino
+    // 3. Moverlo un trocito hacia su destino.
+    // Si está de charla (sección 13), se queda donde está: es de mala
+    // educación irse andando mientras te hablan.
     const dx = p.destino.x - p.x;
     const dy = p.destino.y - p.y;
     const distancia = Math.sqrt(dx * dx + dy * dy);
 
-    if (distancia > VELOCIDAD) {
+    if (!p.charlando && distancia > VELOCIDAD) {
       p.x += (dx / distancia) * VELOCIDAD;
       p.y += (dy / distancia) * VELOCIDAD;
       p.elemento.classList.add("caminando");
     }
 
-    // Al llegar, dejan de hacer la animación de caminar.
-    if (distancia <= VELOCIDAD) p.elemento.classList.remove("caminando");
+    // Al llegar (o al pararse a charlar), dejan de hacer la animación de caminar.
+    if (distancia <= VELOCIDAD || p.charlando) p.elemento.classList.remove("caminando");
     colocar(p.elemento, p.x, p.y);
 
     // Si su ficha está abierta, actualizamos lo que está haciendo
@@ -1016,7 +1022,243 @@ async function consultarAvisosReales() {
 }
 
 
-/* ---------- 13. ARRANQUE ---------- */
+/* ---------- 13. LAS CHARLAS ENTRE VECINOS 💬 ---------- */
+
+// Los vecinos ya no son islas: cuando dos se cruzan (por la plaza, en la
+// puerta del restaurante o juntitos en la izakaya) se paran a charlar un
+// rato. Cada uno habla de lo suyo —Oni de ejercicio, Kitsune de gastos,
+// Kappa de comidas, Yuki de recordatorios, Tengu de trabajo— y el otro
+// le contesta llevando el tema a SU terreno. Ahí está la gracia.
+//
+// Cómo funciona, paso a paso:
+//   1. Cada segundo, pasoDeCharla() mira si hay una charla en marcha.
+//   2. Si la hay, enseña la frase que toca en el bocadillo del que habla.
+//   3. Si no la hay, busca dos vecinos DESPIERTOS y CERCA el uno del otro
+//      (distancia menor que DISTANCIA_CHARLA, en fracciones del mapa) y
+//      les monta una conversación de 2 o 3 frases.
+//   4. Mientras dura la charla, los dos se quedan quietos (p.charlando);
+//      al acabar, cada uno sigue con su rutina como si nada.
+// Solo hay una charla a la vez y entre charla y charla pasa un rato,
+// para que el pueblo no parezca una pajarería.
+
+// Lo que dice cada uno cuando EMPIEZA una conversación (va de su tema).
+const frasesCharla = {
+  ejercicio: [
+    "Llevo 300 sentadillas hoy. Y aún queda tarde.",
+    "Caminar hasta la izakaya también cuenta como cardio, que conste.",
+    "Mañana toca rutina de brazo. Las escaleras del ayuntamiento ayudan.",
+    "Vi al alcalde caminar ayer. Buen ritmo, hay que decirlo.",
+    "El truco está en no romper la racha. Ni un día.",
+    "¿Alguien se apunta a unas flexiones? ¿Nadie? Como siempre.",
+  ],
+  gastos: [
+    "He sumado los cafés del mes y casi me da algo.",
+    "El sake de la izakaya está bien de precio, lo tengo controlado.",
+    "Hoy es buen día para no gastar. Como ayer. Y como mañana.",
+    "He encontrado una suscripción que nadie usaba. Cazada.",
+    "Ahorrar no es no gastar: es gastar sabiendo.",
+    "Las monedas pequeñas también lloran si las ignoras.",
+  ],
+  recordatorios: [
+    "Recordatorio: quedan cero recordatorios pendientes. Qué paz.",
+    "¿Os habéis apuntado lo de mañana? ¿Seguro? ¿Seguro seguro?",
+    "Yo no olvido nada: me apunto hasta respirar.",
+    "Tres cartas entregadas hoy y ni una perdida. Récord.",
+    "Apuntadlo ahora o lo apunto yo. Luego no digáis.",
+    "El buzón del alcalde está al día. Orgullo de mensajera.",
+  ],
+  trabajo: [
+    "He visto tres ofertas nuevas de camarero. Pinta bien la semana.",
+    "Los viernes los bares buscan refuerzo. Apuntado en la agenda.",
+    "Un buen CV es como un buen sashimi: fresco y sin relleno.",
+    "Estoy puliendo la lista de bares del puerto. Uno cae, ya verás.",
+    "Trabajar de camarero es cardio con propinas, que conste.",
+    "¿Alguien quiere ensayar una entrevista? Ensayo gratis.",
+  ],
+  comidas: [
+    "Hoy hay yakitori. Y mañana también, si el horno se porta.",
+    "La dieta empieza con el desayuno, no con el lunes.",
+    "He preparado un menú nuevo: rico, sano y barato. El triplete.",
+    "¿Quién ha dicho croquetas? Ah, que he sido yo.",
+    "Comer bien no es comer poco: es comer con cabeza.",
+    "El secreto del ramen es la paciencia. Y el caldo.",
+  ],
+  tanuki: [
+    "Todo bajo control. El alcalde no se entera de nada... bueno, de todo.",
+    "He entregado todos los avisos del día. Merezco un sake.",
+    "Este pueblo funciona porque yo no duermo... bueno, un poco sí.",
+    "Si me necesitáis, estoy junto al ayuntamiento. Como siempre.",
+    "Ordenar avisos es mi arte. Repartirlos, mi deporte.",
+  ],
+  alcalde: [
+    "Me encanta ver el pueblo en marcha. Todo bajo control.",
+    "Que conste en acta: hoy el pueblo luce de lujo.",
+    "Un alcalde con buenos vecinos no necesita varita mágica.",
+    "El pueblo huele a yakitori. Señal de que todo va bien.",
+  ],
+};
+
+// Lo que CONTESTA cada uno: lleve el tema a su terreno, pase lo que pase.
+const respuestasCharla = {
+  ejercicio: [
+    "¿Eso cansa? Porque si no, no cuenta.",
+    "Muy bien, pero ¿y las flexiones qué?",
+    "Hablar también quema calorías. Poquitas.",
+  ],
+  gastos: [
+    "¿Y eso cuánto cuesta? Pregunto por un amigo.",
+    "Si es gratis, me apunto dos veces.",
+    "Apuntado en el libro de gastos. Todo suma.",
+  ],
+  recordatorios: [
+    "Espera, que lo apunto antes de que se olvide.",
+    "¿Tienes recordatorio para eso? ¿No? Pues ya lo tienes.",
+    "Anotado, sellado y entregado.",
+  ],
+  trabajo: [
+    "¿Eso tiene contrato? Porque si no...",
+    "En un bar eso lo llaman turno partido.",
+    "Suena a oferta con posibilidades.",
+  ],
+  comidas: [
+    "¿Pero has comido ya? Eso es lo primero.",
+    "Hablar da hambre. Tengo croquetas.",
+    "Todo eso se arregla con un buen caldo.",
+  ],
+  tanuki: [
+    "Se lo cuento al alcalde en el próximo aviso.",
+    "Anotado para el alcalde. Gracias por el chisme.",
+    "El alcalde estará encantado de saberlo.",
+  ],
+  alcalde: [
+    "Me apunto eso. El pueblo primero.",
+    "Así me gusta: vecinos con iniciativa.",
+    "Que conste en acta.",
+  ],
+};
+
+// Frases especiales de la izakaya (de 20 a 23): allí se habla de fiesta.
+const frasesBar = [
+  "¡Otra ronda, que la noche es joven!",
+  "¿Quién se atreve con el karaoke?",
+  "Este sake sabe a victoria.",
+  "Las cartas no mienten... casi nunca.",
+  "¡Brindis por el alcalde!",
+  "El yakitori de hoy está para repetir.",
+];
+const respuestasBar = [
+  "¡Por el pueblo!",
+  "¡Salud!",
+  "Eso, eso.",
+  "La próxima la paga el que pierda.",
+];
+
+// Cierres cortos para cuando la charla tiene tercera frase.
+const cierresCharla = ["😂", "Jajaja", "Eso es.", "Totalmente.", "👏"];
+
+// A qué distancia (fracción del mapa) hay que estar para ponerse a charlar.
+// Los sitios de la izakaya están a ~0.10 y Tanuki a ~0.09 del alcalde.
+const DISTANCIA_CHARLA = 0.11;
+
+// La charla en marcha, o null. { participantes, lineas, indice, ticks }
+let charla = null;
+// Momento a partir del cual puede empezar la siguiente charla.
+// Con el truco "#charlas" salen seguido (para pruebas); si no, tardan un poco.
+let proximaCharlaEn = Date.now() + (trucos.has("charlas") ? 3000 : 12000);
+
+// La clave con la que se buscan las frases de cada personaje.
+function claveCharla(p) {
+  return p.tipo === "agente" ? p.datos.tema : p.tipo; // "alcalde" o "tanuki"
+}
+
+function elegirAlAzar(lista) {
+  return lista[Math.floor(Math.random() * lista.length)];
+}
+
+// Busca una pareja de vecinos despiertos y cerca. Devuelve [a, b] o null.
+function buscarParejaParaCharla() {
+  // No charlan: los que duermen, los que ya están de charla y Tanuki
+  // cuando va con un aviso (tiene trabajo que hacer).
+  const libres = personajes.filter(p =>
+    p.burbuja.textContent !== "💤" && !p.charlando && !(p.tipo === "tanuki" && aviso));
+  const parejas = [];
+  for (let i = 0; i < libres.length; i++) {
+    for (let j = i + 1; j < libres.length; j++) {
+      const dx = libres[i].x - libres[j].x;
+      const dy = libres[i].y - libres[j].y;
+      if (Math.sqrt(dx * dx + dy * dy) < DISTANCIA_CHARLA) parejas.push([libres[i], libres[j]]);
+    }
+  }
+  return parejas.length ? elegirAlAzar(parejas) : null;
+}
+
+// Monta la conversación: A abre con su tema, B contesta llevándolo al suyo
+// y, a veces, A la cierra con una risa. En la izakaya se usan frases de bar.
+function prepararCharla(a, b) {
+  const hora = horaDelPueblo();
+  const enElBar = hora >= HORA_BAR && hora < HORA_DORMIR;
+  const primera = enElBar ? elegirAlAzar(frasesBar) : elegirAlAzar(frasesCharla[claveCharla(a)]);
+  const segunda = enElBar && Math.random() < 0.5
+    ? elegirAlAzar(respuestasBar)
+    : elegirAlAzar(respuestasCharla[claveCharla(b)]);
+  const lineas = [{ quien: a, texto: primera }, { quien: b, texto: segunda }];
+  if (Math.random() < 0.5) lineas.push({ quien: a, texto: elegirAlAzar(cierresCharla) });
+  return { participantes: [a, b], lineas: lineas, indice: -1, ticks: 0 };
+}
+
+// Cierra la charla: se borran los bocadillos y cada uno sigue con lo suyo.
+function terminarCharla() {
+  for (const p of charla.participantes) {
+    p.charlando = false;
+    p.charla.classList.add("oculta");
+  }
+  charla = null;
+  // La siguiente charla, dentro de un rato (con "#charlas", enseguida).
+  proximaCharlaEn = Date.now() + (trucos.has("charlas") ? 6000 : 18000 + Math.random() * 15000);
+}
+
+// El corazón de las charlas: se llama una vez por segundo.
+function pasoDeCharla() {
+  if (charla) {
+    // Hay charla en marcha: cuando toca, pasamos a la frase siguiente.
+    charla.ticks--;
+    if (charla.ticks > 0) return;
+    charla.indice++;
+    for (const p of charla.participantes) p.charla.classList.add("oculta");
+    if (charla.indice >= charla.lineas.length) { terminarCharla(); return; }
+    const linea = charla.lineas[charla.indice];
+    linea.quien.charla.textContent = linea.texto; // textContent: nunca HTML
+    linea.quien.charla.classList.remove("oculta");
+    // Si el bocadillo se sale del mapa (el que habla está en un borde),
+    // lo empujamos hacia dentro y movemos el piquito para que siga
+    // apuntando a la cabeza del que habla.
+    const bocadillo = linea.quien.charla;
+    const medidaBocadillo = bocadillo.getBoundingClientRect();
+    const medidaMapa = mapa.getBoundingClientRect();
+    let desplaza = 0;
+    if (medidaBocadillo.left < medidaMapa.left + 4) desplaza = medidaMapa.left + 4 - medidaBocadillo.left;
+    if (medidaBocadillo.right > medidaMapa.right - 4) desplaza = medidaMapa.right - 4 - medidaBocadillo.right;
+    bocadillo.style.marginLeft = desplaza + "px";
+    bocadillo.style.setProperty("--cola-x", "calc(50% - " + desplaza + "px)");
+    // Cada frase dura según lo larga que sea (para que dé tiempo a leerla).
+    charla.ticks = Math.max(3, Math.round(2 + linea.texto.length / 20));
+    return;
+  }
+  // No hay charla: ¿ya puede salir la siguiente? ¿Y hay pareja cerca?
+  if (Date.now() < proximaCharlaEn) return;
+  const pareja = buscarParejaParaCharla();
+  if (!pareja) { proximaCharlaEn = Date.now() + 5000; return; }
+  charla = prepararCharla(pareja[0], pareja[1]);
+  for (const p of charla.participantes) {
+    p.charlando = true;
+    p.elemento.classList.remove("caminando");
+  }
+}
+
+const intervaloCharlas = setInterval(pasoDeCharla, 1000);
+
+
+/* ---------- 14. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
@@ -1051,6 +1293,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) cons
 // las ideas del día salen igual a los 12 segundos (con clima neutro).
 setTimeout(generarIdeasDelDia, 12000);
 
+// Con "#sincharlas" se paran los cotilleos del pueblo (para pruebas).
+if (trucos.has("sincharlas")) clearInterval(intervaloCharlas);
+
 // Cada segundo real: si el avance rápido está activo, la hora corre
 // (un día en 2 minutos); si no, solo refrescamos el reloj.
 setInterval(() => {
@@ -1073,6 +1318,8 @@ setInterval(pasoDelJuego, 50);
 // - "#dia-5" simula el día de la semana (0 = domingo ... 6 = sábado).
 // - "#rapido" entrega los avisos en cola con muy poca espera entre ellos.
 // - "#directo" manda los avisos al buzón sin el paseo de Tanuki.
+// - "#charlas" hace que los vecinos charlen mucho más seguido (para pruebas).
+// - "#sincharlas" apaga las charlas por completo.
 if (trucos.has("buzon") || trucos.has("abrebuzon")) panelBuzon.classList.remove("oculta");
 if (trucos.has("ficha")) mostrarFicha("Tanuki");
 const trucoHora = trucoConPrefijo("h");
