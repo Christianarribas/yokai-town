@@ -17,7 +17,8 @@
     14. El mercadillo del sábado 🧺
     15. Los festivales yokai 🌸👹🎆
     16. Las estaciones del año 🍂❄️🌻🌷
-    17. Arranque
+    17. Las misiones del Tanuki 🎯
+    18. Arranque
    ==================================================
 
    FORMATO DE avisos.json (lo escribe Instinct a mano, mismo directorio):
@@ -27,7 +28,10 @@
          "id": "cita-osakidetza-2026-11-20",   // obligatorio, ÚNICO: no repetir nunca
          "agente": "yuki",                     // oni | kitsune | yuki | tengu | kappa
          "texto": "Mañana tienes cita en Osakidetza a las 10:30.",
-         "fecha": "2026-11-19T18:00:00+01:00"  // opcional (si falta, se usa la de llegada)
+         "fecha": "2026-11-19T18:00:00+01:00", // opcional (si falta, se usa la de llegada)
+         "tipo": "mision"                      // opcional: si es "mision", llega
+                                               // como reto y el alcalde la marca
+                                               // cumplida desde el buzón (sección 17)
        }
      ]
    }
@@ -303,6 +307,15 @@ function puertaDe(edificio) {
 // Decide QUÉ debería estar haciendo cada personaje según la hora.
 // Devuelve su "zona" del mapa, el texto para la ficha y su burbuja.
 function rutina(p, hora) {
+  // Cuando el alcalde cumple una misión (sección 17), el pueblo entero
+  // baja a la plaza a celebrarlo un minuto (si es de día y están despiertos).
+  if (enCelebracion() && hora >= 8 && hora < HORA_DORMIR) {
+    if (p.tipo === "alcalde") {
+      return { zona: { x: plaza.x, y: plaza.y - 0.03 }, quieto: true, texto: "Recibiendo la enhorabuena del pueblo 🏅", burbuja: "🏅" };
+    }
+    return { zona: sitiosCelebracion[p.numero], quieto: true, texto: "¡Celebrando la misión del alcalde! 🎉", burbuja: ["🎉", "🎊", "🥳", "👏"][p.numero % 4] };
+  }
+
   // --- El alcalde ---
   if (p.tipo === "alcalde") {
     const puertaCasa = puertaDe(ayuntamiento);
@@ -522,11 +535,12 @@ let ticksHastaAviso = 200; // ~10 segundos
 // Mete un aviso en la cola (o directo al buzón con el truco "#directo").
 // Los que tienen id ya recibido o ya encolado se ignoran: jamás se repiten.
 // "prioritario" lo pone el primero de la cola (avisos reales antes que ideas).
-function encolarAviso(agentePersonaje, texto, id, fecha, prioritario) {
+function encolarAviso(agentePersonaje, texto, id, fecha, prioritario, tipo) {
   const yaExiste = id && (avisosRecibidos.some(a => a.id === id) ||
     colaAvisos.some(a => a.id === id) || (aviso && aviso.id === id));
   if (yaExiste) return;
-  const nuevo = { agente: agentePersonaje, texto: texto, id: id || null, fecha: fecha || null };
+  const nuevo = { agente: agentePersonaje, texto: texto, id: id || null, fecha: fecha || null,
+    tipo: tipo === "mision" ? "mision" : "aviso" };
   if (trucos.has("directo")) { guardarEnBuzon(nuevo); return; }
   if (prioritario) colaAvisos.unshift(nuevo); else colaAvisos.push(nuevo);
 }
@@ -635,6 +649,8 @@ function guardarEnBuzon(avisoEntregado) {
     tema: avisoEntregado.agente.datos.tema,
     texto: avisoEntregado.texto,
     leido: false,
+    tipo: avisoEntregado.tipo === "mision" ? "mision" : "aviso",
+    cumplida: false, // solo se usa si es una misión (sección 17)
   });
   // Como mucho guardamos los 100 avisos más recientes.
   if (avisosRecibidos.length > 100) avisosRecibidos.length = 100;
@@ -653,16 +669,36 @@ function dibujarBuzon() {
   for (const a of avisosRecibidos) {
     const item = document.createElement("li");
     item.className = a.leido ? "aviso-item" : "aviso-item no-leido";
+    if (a.tipo === "mision") item.classList.add("mision");
+    if (a.cumplida) item.classList.add("cumplida");
     // textContent evita interpretar como HTML los datos recuperados del dispositivo.
     for (const [clase, texto] of [
       ["aviso-hora", a.hora],
-      ["aviso-quien", `${a.emoji} ${a.agente} · ${a.tema}`],
+      ["aviso-quien", a.tipo === "mision" ? `🎯 ${a.emoji} ${a.agente} · misión` : `${a.emoji} ${a.agente} · ${a.tema}`],
       ["aviso-texto", a.texto],
     ]) {
       const parte = document.createElement(clase === "aviso-texto" ? "p" : "span");
       parte.className = clase;
       parte.textContent = texto;
       item.appendChild(parte);
+    }
+    // Las misiones llevan su botón para marcarlas cumplidas (sección 17).
+    if (a.tipo === "mision" && a.id) {
+      if (a.cumplida) {
+        const hecha = document.createElement("p");
+        hecha.className = "mision-hecha";
+        hecha.textContent = "✅ ¡Misión cumplida!";
+        item.appendChild(hecha);
+      } else {
+        const boton = document.createElement("button");
+        boton.className = "boton-mision";
+        boton.textContent = "🎉 ¡Misión cumplida!";
+        boton.addEventListener("click", (evento) => {
+          evento.stopPropagation(); // no cierres el buzón al pulsar
+          cumplirMision(a.id);
+        });
+        item.appendChild(boton);
+      }
     }
     if (a.fecha) {
       const fecha = document.createElement("small");
@@ -712,6 +748,8 @@ function cargarMemoria() {
         id: typeof a.id === "string" ? a.id : null,
         hora: a.hora, agente: a.agente, emoji: a.emoji, tema: a.tema,
         texto: a.texto, leido: a.leido,
+        tipo: a.tipo === "mision" ? "mision" : "aviso",
+        cumplida: a.cumplida === true,
         fecha: typeof a.fecha === "string" && Number.isFinite(Date.parse(a.fecha)) ? a.fecha : null,
       }));
     return { avisos, sinAnimacion: typeof datos.sinAnimacion === "boolean" ? datos.sinAnimacion : null };
@@ -1023,7 +1061,8 @@ async function consultarAvisosReales() {
       if (!personaje) continue;
       const fecha = typeof item.fecha === "string" && Number.isFinite(Date.parse(item.fecha)) ? item.fecha : null;
       // "real-" + id: no choca con los id de las ideas locales.
-      encolarAviso(personaje, item.texto.trim(), "real-" + item.id.trim(), fecha, true);
+      // Con "tipo": "mision" llega como reto del Tanuki (sección 17).
+      encolarAviso(personaje, item.texto.trim(), "real-" + item.id.trim(), fecha, true, item.tipo);
     }
   } catch (error) {
     // Sin archivo, sin conexión o JSON roto: el pueblo sigue igual.
@@ -1210,7 +1249,7 @@ function buscarParejaParaCharla() {
     for (let j = i + 1; j < libres.length; j++) {
       const dx = libres[i].x - libres[j].x;
       const dy = libres[i].y - libres[j].y;
-      const distanciaMaxima = (esMercadillo() || esNocheDeFuegos()) ? DISTANCIA_CHARLA_MERCADILLO : DISTANCIA_CHARLA;
+      const distanciaMaxima = (esMercadillo() || esNocheDeFuegos() || enCelebracion()) ? DISTANCIA_CHARLA_MERCADILLO : DISTANCIA_CHARLA;
       if (Math.sqrt(dx * dx + dy * dy) < distanciaMaxima) parejas.push([libres[i], libres[j]]);
     }
   }
@@ -1223,7 +1262,8 @@ function prepararCharla(a, b) {
   const hora = horaDelPueblo();
   const enElBar = hora >= HORA_BAR && hora < HORA_DORMIR;
   const festival = festivalDeHoy();
-  const primera = esNocheDeFuegos() ? elegirAlAzar(frasesFuegos)
+  const primera = enCelebracion() ? elegirAlAzar(frasesCelebracion)
+    : esNocheDeFuegos() ? elegirAlAzar(frasesFuegos)
     : enElBar ? elegirAlAzar(frasesBar)
     : esMercadillo() ? elegirAlAzar(frasesMercadillo)
     : festival ? elegirAlAzar(frasesFestival[festival])
@@ -1656,7 +1696,72 @@ function crearEstacion() {
 crearEstacion();
 
 
-/* ---------- 17. ARRANQUE ---------- */
+/* ---------- 17. LAS MISIONES DEL TANUKI 🎯 ---------- */
+
+// Instinct puede mandar RETOS al alcalde por el buzón: son avisos con
+// "tipo": "mision" en avisos.json (formato arriba del todo). Llegan como
+// cualquier aviso —Tanuki los recoge y se los lleva al alcalde— pero en
+// el buzón llevan un botón: "🎉 ¡Misión cumplida!".
+//
+// Cuando el alcalde la pulsa, el pueblo ENTERO baja un minuto a la plaza
+// a celebrarlo: corro alrededor de la fuente, confeti cayendo y charlas
+// de enhorabuena. Pasado el minuto, cada uno vuelve a su rutina.
+// La misión queda marcada con ✅ en el buzón para siempre (memoria local).
+
+// Las frases de la celebración (se usan en las charlas, sección 13).
+const frasesCelebracion = [
+  "¡El alcalde lo ha conseguido! ¡Viva el alcalde!",
+  "¡Misión cumplida! Esto hay que celebrarlo.",
+  "Yo nunca dudé de él. Bueno, un poquito al principio.",
+  "¡Que conste en acta: el alcalde es un crack!",
+  "La próxima misión ya tiene listo el confeti.",
+  "¡A por la siguiente! Pero primero, un brindis.",
+];
+
+// ¿Está el pueblo de celebración? (un minuto desde que se cumple la misión)
+let celebracionHasta = 0;
+function enCelebracion() {
+  return Date.now() < celebracionHasta;
+}
+
+// El corro de la fiesta: la misma rueda de la plaza que se usa para
+// ver los fuegos artificiales (sección 15).
+const sitiosCelebracion = sitiosFuegos;
+
+// El alcalde pulsa el botón de una misión en el buzón: se marca para
+// siempre y arranca la fiesta.
+function cumplirMision(id) {
+  const mision = avisosRecibidos.find(a => a.id === id && a.tipo === "mision");
+  if (!mision || mision.cumplida) return;
+  mision.cumplida = true;
+  guardarMemoria();
+  dibujarBuzon();
+  celebracionHasta = Date.now() + 60000;
+  mostrarAviso("🎉 ¡Misión cumplida! El pueblo lo celebra con el alcalde");
+  lanzarConfeti();
+}
+
+// El confeti de la fiesta: cae un minuto y luego la capa se retira sola.
+function lanzarConfeti() {
+  const capa = document.createElement("div");
+  capa.className = "capa-confeti";
+  capa.setAttribute("aria-hidden", "true");
+  for (let numero = 0; numero < 24; numero++) {
+    const papel = document.createElement("span");
+    papel.className = "confeti";
+    papel.textContent = elegirAlAzar(["🎊", "🎉", "✨", "🎈"]);
+    papel.style.left = Math.random() * 100 + "%";
+    papel.style.setProperty("--demora", -Math.random() * 9 + "s");
+    papel.style.setProperty("--duracion", (3.5 + Math.random() * 3) + "s");
+    papel.style.setProperty("--altura-quieta", Math.random() * 100 + "%");
+    capa.appendChild(papel);
+  }
+  mapa.appendChild(capa);
+  setTimeout(() => capa.remove(), 62000);
+}
+
+
+/* ---------- 18. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
@@ -1723,7 +1828,13 @@ setInterval(pasoDelJuego, 50);
 //   festival yokai (sección 15).
 // - "#estacion-primavera", "#estacion-verano", "#estacion-otono" o
 //   "#estacion-invierno" simulan la estación del año (sección 16).
+// - "#mision" encola una misión de prueba de Oni (sección 17; con
+//   "#directo#buzon" se ve al momento en el buzón de demostración).
 if (trucos.has("buzon") || trucos.has("abrebuzon")) panelBuzon.classList.remove("oculta");
+if (trucos.has("mision")) {
+  const oni = personajes.find(p => p.tipo === "agente" && p.datos.nombre === "Oni");
+  if (oni) encolarAviso(oni, "Misión de la semana: caminar 3 días seguidos. ¡Tú puedes, alcalde!", "mision-prueba-1", null, true, "mision");
+}
 if (trucos.has("ficha")) mostrarFicha("Tanuki");
 const trucoHora = trucoConPrefijo("h");
 if (trucoHora !== null && Number.isFinite(parseFloat(trucoHora))) {
