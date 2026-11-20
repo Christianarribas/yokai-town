@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport: imprescindible para que se vea bien en el móvil -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yokai Town</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ============================================
+       1. CABECERA: título, botón de avance rápido y reloj
+       ============================================ -->
+  <header id="cabecera">
+    <h1>🏮 Yokai Town</h1>
+    <div id="zona-reloj">
+      <!-- El botón ⏩ hace correr el reloj para ver el día entero -->
+      <button id="boton-avance" title="Ver el día entero rápido">⏩</button>
+      <!-- El buzón 📬: aquí se guardan los avisos que Tanuki entrega al alcalde -->
+      <button id="boton-buzon" title="Abrir el buzón de avisos">📬<span id="contador-buzon" class="oculta">0</span></button>
+      <div id="reloj">
+        <span id="icono-tiempo">☀️</span>
+        <span id="hora">--:--</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================
+       2. MAPA DEL PUEBLO
+       Las casas, los caminos y los personajes
+       los crea app.js (así es más fácil cambiarlos)
+       ============================================ -->
+  <section id="barra-clima" aria-label="Tiempo en Bizkaia">
+    <div><span id="clima-actual" role="status">🌿 Bizkaia · Clima tranquilo</span>
+      <small id="clima-detalle">Santurtzi / Portugalete · Tiempo real, no simulado</small></div>
+    <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo ↗</a>
+  </section>
+  <main id="mapa">
+    <!-- El mar del borde sur: arena arriba y el muelle de madera a la derecha.
+         Va debajo de todo (z-index 0) y no intercepta los toques. -->
+    <div id="mar" aria-hidden="true"></div>
+    <!-- Esta capa no intercepta los toques ni cambia las rutinas. -->
+    <div id="capa-clima" aria-hidden="true"></div>
+    <!-- Capa oscura que sube y baja para hacer la noche -->
+    <div id="filtro-noche"></div>
+  </main>
+
+  <!-- ============================================
+       3. CARTELITO DE AVISOS
+       Sale cuando Tanuki recoge o entrega un aviso
+       ============================================ -->
+  <div id="aviso" class="oculta"></div>
+
+  <!-- ============================================
+       4. FICHA DEL PERSONAJE
+       Se muestra al tocar un personaje
+       ============================================ -->
+  <aside id="ficha" class="oculta">
+    <button id="cerrar-ficha" aria-label="Cerrar">✖</button>
+    <div id="ficha-emoji">🍃</div>
+    <h2 id="ficha-nombre">Nombre</h2>
+    <p id="ficha-oficio">Papel</p>
+    <p id="ficha-estado">Qué está haciendo</p>
+  </aside>
+
+  <!-- ============================================
+       5. BUZÓN DE AVISOS
+       La lista de avisos recibidos (los no leídos llevan un punto)
+       ============================================ -->
+  <section id="buzon" class="oculta">
+    <div id="buzon-cabecera">
+      <h2>📬 Buzón del alcalde</h2>
+      <button id="cerrar-buzon" aria-label="Cerrar">✖</button>
+    </div>
+    <p id="buzon-vacio">Todavía no hay avisos. Cuando Tanuki te traiga uno, aparecerá aquí.</p>
+    <ul id="buzon-lista"></ul>
+  </section>
+
+  <!-- 6. Pista para el jugador -->
+  <p id="ayuda">👆 Toca un vecino para ver su ficha · 💬 Si dos se juntan, se paran a charlar</p>
+
+  <footer id="memoria-pueblo">
+    <span id="estado-memoria" role="status">💾 Memoria de este dispositivo</span>
+    <label><input type="checkbox" id="menos-movimiento"> Clima sin animación</label>
+    <small>El buzón se guarda aquí, no en otros dispositivos.</small>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>
