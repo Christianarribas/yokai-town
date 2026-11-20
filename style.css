@@ -13,6 +13,7 @@
     10. Las charlas entre vecinos
     11. El mercadillo del sábado
     12. Los festivales yokai
+    13. Las estaciones del año
    ================================================== */
 
 /* ---------- 1. GENERAL Y CABECERA ---------- */
@@ -668,4 +669,44 @@ body.de-noche {
   .cartel-festival { font-size: 0.55rem; padding: 2px 8px; }
   .sakura, .mascara-setsubun { font-size: 1.25rem; }
   .fuego-artificial { font-size: 1.6rem; }
+}
+
+
+/* ---------- 13. LAS ESTACIONES DEL AÑO ---------- */
+
+/* El césped cambia de color con la estación real (sección 16 de app.js):
+   verde vivo en primavera, tostado en verano, ocre en otoño y pálido
+   en invierno. Los caminos y las casas no cambian. */
+#mapa[data-estacion="primavera"] { background: linear-gradient(#86c15e, #63a545); }
+#mapa[data-estacion="verano"]    { background: linear-gradient(#b0b04f, #85973a); }
+#mapa[data-estacion="otono"]     { background: linear-gradient(#b3925a, #8f7440); }
+#mapa[data-estacion="invierno"]  { background: linear-gradient(#c9d6cf, #a9bdb4); }
+
+/* La capa de las hojas del otoño (no intercepta toques). */
+#capa-estacion {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Las hojas caen con vaivén, igual que los pétalos del hanami. */
+.hoja-otono {
+  position: absolute;
+  top: -6%;
+  font-size: 13px;
+  animation: caer-hoja var(--duracion) linear infinite;
+  animation-delay: var(--demora);
+  will-change: transform;
+}
+@keyframes caer-hoja {
+  from { transform: translate3d(0, -20px, 0) rotate(0deg); }
+  to { transform: translate3d(-45px, 760px, 0) rotate(-300deg); }
+}
+
+/* Menos movimiento: las hojas se quedan quietas. */
+.clima-quieto .hoja-otono { animation: none; top: var(--altura-quieta); }
+@media (prefers-reduced-motion: reduce) {
+  .hoja-otono { animation: none; top: var(--altura-quieta); }
 }
