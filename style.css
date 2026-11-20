@@ -12,6 +12,7 @@
      9. Clima real y memoria
     10. Las charlas entre vecinos
     11. El mercadillo del sábado
+    12. Los festivales yokai
    ================================================== */
 
 /* ---------- 1. GENERAL Y CABECERA ---------- */
@@ -574,4 +575,97 @@ body.de-noche {
     font-size: 1.1rem;
     padding: 4px 6px;
   }
+}
+
+
+/* ---------- 12. LOS FESTIVALES YOKAI ---------- */
+
+/* El cartelito de la fiesta del día (sección 15 de app.js), arriba
+   del todo del mapa. */
+.cartel-festival {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: #fffef5;
+  color: #4a3b2a;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 2px solid #e8b4c8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+.cartel-festival.setsubun { border-color: #d96a4b; }
+.cartel-festival.fuegos {
+  border-color: #f4c95d;
+  background: #2b2740;
+  color: #ffe9a8;
+}
+
+/* La capa de los pétalos del hanami y los fuegos artificiales:
+   no intercepta toques ni cambia las rutinas. */
+#capa-festival {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Los cerezos en flor del hanami y las máscaras de oni del setsubun:
+   decoración plana, como los árboles de siempre. */
+.sakura, .mascara-setsubun {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 1.5rem;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
+/* Los pétalos caen con vaivén, como la nieve del clima (sección 9). */
+.petalo-hanami {
+  position: absolute;
+  top: -6%;
+  font-size: 12px;
+  color: #f7a8c4;
+  animation: caer-petalo var(--duracion) linear infinite;
+  animation-delay: var(--demora);
+  will-change: transform;
+}
+@keyframes caer-petalo {
+  from { transform: translate3d(0, -20px, 0) rotate(0deg); }
+  to { transform: translate3d(50px, 760px, 0) rotate(320deg); }
+}
+
+/* Cada fuego artificial nace pequeño, estalla y se desvanece. */
+.fuego-artificial {
+  position: absolute;
+  font-size: 2rem;
+  transform: translate(-50%, -50%);
+  animation: estallar-fuego 2.4s ease-out forwards;
+  will-change: transform, opacity;
+}
+@keyframes estallar-fuego {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  25% { opacity: 1; }
+  60% { transform: translate(-50%, -50%) scale(1.4); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+}
+
+/* Menos movimiento: pétalos y fuegos estáticos, conservando la fiesta. */
+.clima-quieto .petalo-hanami { animation: none; top: var(--altura-quieta); }
+.clima-quieto .fuego-artificial { animation: none; opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) {
+  .petalo-hanami { animation: none; top: var(--altura-quieta); }
+  .fuego-artificial { animation: none; opacity: 0.85; }
+}
+
+@media (max-width: 600px) {
+  .cartel-festival { font-size: 0.55rem; padding: 2px 8px; }
+  .sakura, .mascara-setsubun { font-size: 1.25rem; }
+  .fuego-artificial { font-size: 1.6rem; }
 }
