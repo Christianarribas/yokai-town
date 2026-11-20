@@ -16,7 +16,8 @@
     13. Las charlas entre vecinos 💬
     14. El mercadillo del sábado 🧺
     15. Los festivales yokai 🌸👹🎆
-    16. Arranque
+    16. Las estaciones del año 🍂❄️🌻🌷
+    17. Arranque
    ==================================================
 
    FORMATO DE avisos.json (lo escribe Instinct a mano, mismo directorio):
@@ -194,12 +195,15 @@ function crearPlaza() {
   mapa.appendChild(elemento);
 }
 
-// Crea los árboles y plantas.
+// Crea los árboles y plantas. La estación del año (sección 16) cambia
+// el aspecto de algunos: en otoño los árboles de hoja se vuelven arces,
+// en invierno solo quedan pinos y la nieve, etc.
 function crearDecoracion() {
+  const cambios = decoPorEstacion[estacionDelAno()] || {};
   for (const cosa of decoracion) {
     const elemento = document.createElement("div");
     elemento.className = "deco";
-    elemento.textContent = cosa.emoji;
+    elemento.textContent = cambios[cosa.emoji] || cosa.emoji;
     colocar(elemento, cosa.x, cosa.y);
     mapa.appendChild(elemento);
   }
@@ -1223,6 +1227,7 @@ function prepararCharla(a, b) {
     : enElBar ? elegirAlAzar(frasesBar)
     : esMercadillo() ? elegirAlAzar(frasesMercadillo)
     : festival ? elegirAlAzar(frasesFestival[festival])
+    : Math.random() < 0.35 ? elegirAlAzar(frasesEstacion[estacionDelAno()])
     : elegirAlAzar(frasesCharla[claveCharla(a)]);
   const segunda = enElBar && Math.random() < 0.5
     ? elegirAlAzar(respuestasBar)
@@ -1524,7 +1529,134 @@ setInterval(() => {
 crearFestival();
 
 
-/* ---------- 16. ARRANQUE ---------- */
+/* ---------- 16. LAS ESTACIONES DEL AÑO 🍂❄️🌻🌷 ---------- */
+
+// El pueblo cambia de aspecto con la estación del año real (igual que el
+// clima, esto va con el calendario de verdad, no con el botón ⏩):
+//   - PRIMAVERA (20 mar - 20 jun): césped más vivo y flores nuevas.
+//   - VERANO (21 jun - 22 sep): el césped se tuesta un poco y salen girasoles.
+//   - OTOÑO (23 sep - 20 dic): el césped se vuelve ocre, los árboles de hoja
+//     son arces y caen hojas por el pueblo todo el día.
+//   - INVIERNO (21 dic - 19 mar): el pueblo se cubre de un manto pálido,
+//     solo quedan los pinos y aparece un muñeco de nieve.
+// Para pruebas: "#estacion-primavera", "#estacion-verano",
+// "#estacion-otono" o "#estacion-invierno".
+const estaciones = {
+  primavera: { desde: "03-20", hasta: "06-20" },
+  verano:    { desde: "06-21", hasta: "09-22" },
+  otono:     { desde: "09-23", hasta: "12-20" },
+  invierno:  { desde: "12-21", hasta: "03-19" }, // cruza el cambio de año
+};
+
+// ¿Qué estación es hoy?
+function estacionDelAno() {
+  const trucada = trucoConPrefijo("estacion-");
+  if (trucada && estaciones[trucada]) return trucada;
+  const ahora = new Date();
+  const hoy = String(ahora.getMonth() + 1).padStart(2, "0") + "-" + String(ahora.getDate()).padStart(2, "0");
+  for (const [clave, estacion] of Object.entries(estaciones)) {
+    const dentro = estacion.desde <= estacion.hasta
+      ? hoy >= estacion.desde && hoy <= estacion.hasta
+      : hoy >= estacion.desde || hoy <= estacion.hasta;
+    if (dentro) return clave;
+  }
+  return "verano"; // no debería pasar: las cuatro cubren el año entero
+}
+
+// Cómo cambia la decoración de siempre según la estación (se usa en la
+// sección 2, al crear los árboles y las plantas).
+const decoPorEstacion = {
+  verano:   { "🌷": "🌻" },
+  otono:    { "🌳": "🍁", "🌷": "🍂", "🌼": "🍂" },
+  invierno: { "🌳": "🌲", "🌷": "⛄", "🌼": "❄️" },
+};
+
+// Detalles EXTRA que solo salen en su estación (no quitan nada de lo normal).
+const extrasPorEstacion = {
+  primavera: [
+    { emoji: "🌷", x: 0.20, y: 0.62 }, { emoji: "🌼", x: 0.80, y: 0.62 },
+    { emoji: "🌷", x: 0.45, y: 0.06 }, { emoji: "💐", x: 0.55, y: 0.94 },
+  ],
+  verano: [
+    { emoji: "🌻", x: 0.20, y: 0.62 }, { emoji: "🌻", x: 0.80, y: 0.62 },
+    { emoji: "🌻", x: 0.06, y: 0.62 },
+  ],
+  otono: [
+    { emoji: "🍂", x: 0.20, y: 0.62 }, { emoji: "🍂", x: 0.80, y: 0.62 },
+    { emoji: "🌰", x: 0.36, y: 0.94 },
+  ],
+  invierno: [
+    { emoji: "⛄", x: 0.62, y: 0.60 }, { emoji: "🛷", x: 0.12, y: 0.50 },
+  ],
+};
+
+// Frases de charla de cada estación: los días normales (sin mercadillo
+// ni festival), una de cada tres charlas abre hablando del tiempo que hace.
+const frasesEstacion = {
+  primavera: [
+    "Qué ganas tenía de primavera, oiga.",
+    "Las flores nuevas del pueblo son cosa mía. Bueno, y de la primavera.",
+    "Con este airecito apetece hasta trabajar. Casi.",
+    "La primavera la sangre altera... y a los cerezos ni te cuento.",
+  ],
+  verano: [
+    "Qué calor hace ya. El pueblo se tuesta.",
+    "Los girasoles de este año han salido enormes.",
+    "En verano hasta la siesta es institución municipal.",
+    "Con este sol, la fuente de la plaza es la reina del pueblo.",
+  ],
+  otono: [
+    "Las hojas caen con estilo. Barro yo luego, pero con estilo.",
+    "El ocre le sienta al pueblo que ni pintado.",
+    "Ya huele a castañas. El otoño ha llegado oficialmente.",
+    "Cada hoja que cae es un recordatorio de que toca recoger hojas.",
+  ],
+  invierno: [
+    "Qué frío hace, hasta los pinos tienen frío.",
+    "El muñeco de nieve de la plaza sigue en pie. Todo bajo control.",
+    "En invierno el pueblo parece de postal, oiga.",
+    "Con este frío, la izakaya es la mejor calefacción del pueblo.",
+  ],
+};
+
+// Monta la estación: tiñe el césped, pone los extras y, en otoño, las
+// hojas que caen. Los cambios de los árboles se hacen en la sección 2.
+function crearEstacion() {
+  const estacion = estacionDelAno();
+  mapa.dataset.estacion = estacion;
+
+  for (const extra of extrasPorEstacion[estacion]) {
+    const elemento = document.createElement("div");
+    elemento.className = "deco";
+    elemento.textContent = extra.emoji;
+    colocar(elemento, extra.x, extra.y);
+    mapa.appendChild(elemento);
+  }
+
+  // Las hojas del otoño caen todo el día, como los pétalos del hanami.
+  if (estacion === "otono") {
+    const capa = document.createElement("div");
+    capa.id = "capa-estacion";
+    capa.setAttribute("aria-hidden", "true");
+    mapa.appendChild(capa);
+    for (let numero = 0; numero < 14; numero++) {
+      const hoja = document.createElement("span");
+      hoja.className = "hoja-otono";
+      hoja.textContent = "🍂";
+      hoja.style.left = Math.random() * 100 + "%";
+      hoja.style.setProperty("--demora", -Math.random() * 9 + "s");
+      hoja.style.setProperty("--duracion", (6 + Math.random() * 5) + "s");
+      hoja.style.setProperty("--altura-quieta", Math.random() * 100 + "%");
+      capa.appendChild(hoja);
+    }
+  }
+}
+
+// El pueblo siempre tiene una estación puesta.
+crearEstacion();
+
+
+/* ---------- 17. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
@@ -1589,6 +1721,8 @@ setInterval(pasoDelJuego, 50);
 // - "#dia-6" simula un sábado: sale el mercadillo con sus puestos (sección 14).
 // - "#fiesta-hanami", "#fiesta-setsubun" o "#fiesta-fuegos" simulan cada
 //   festival yokai (sección 15).
+// - "#estacion-primavera", "#estacion-verano", "#estacion-otono" o
+//   "#estacion-invierno" simulan la estación del año (sección 16).
 if (trucos.has("buzon") || trucos.has("abrebuzon")) panelBuzon.classList.remove("oculta");
 if (trucos.has("ficha")) mostrarFicha("Tanuki");
 const trucoHora = trucoConPrefijo("h");
@@ -1597,4 +1731,4 @@ if (trucoHora !== null && Number.isFinite(parseFloat(trucoHora))) {
   horaSimulada = ((parseFloat(trucoHora) % 24) + 24) % 24;
   botonAvance.classList.add("activo");
   actualizarReloj();
-    }
+     }
