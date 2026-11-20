@@ -14,7 +14,8 @@
     11. Ideas locales de los vecinos
     12. Avisos reales (avisos.json, escritos por Instinct)
     13. Las charlas entre vecinos 💬
-    14. Arranque
+    14. El mercadillo del sábado 🧺
+    15. Arranque
    ==================================================
 
    FORMATO DE avisos.json (lo escribe Instinct a mano, mismo directorio):
@@ -305,9 +306,10 @@ function rutina(p, hora) {
     }
     if (hora >= HORA_DORMIR || hora < 8) return { zona: puertaCasa, quieto: true, texto: "Descansando 😴", burbuja: "💤" };
     if (hora < 9)  return { zona: puertaCasa, texto: "Empezando el día", burbuja: "" };
-    if (hora < 13) return { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Firmando papeles del pueblo", burbuja: "📜" }) };
+    // Los sábados no se gobierna: se baja al mercadillo (sección 14).
+    if (hora < 13) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Firmando papeles del pueblo", burbuja: "📜" }) };
     if (hora < 15) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
-    if (hora < 20) return { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Atendiendo a los vecinos", burbuja: "🗣️" }) };
+    if (hora < 20) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...alternar(p.numero, { texto: "Gobernando desde el ayuntamiento", burbuja: "👑" }, { texto: "Atendiendo a los vecinos", burbuja: "🗣️" }) };
     return actividadDelBar(p.numero);
   }
 
@@ -319,7 +321,9 @@ function rutina(p, hora) {
     if (hora >= HORA_DORMIR || hora < 8) return { zona: suSitio, quieto: true, texto: "Descansando 😴", burbuja: "💤" };
     if (hora >= HORA_BAR) return actividadDelBar(p.numero);
     if (hora >= 13 && hora < 14) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
-    return { zona: suSitio, ...alternar(p.numero, { texto: "A la espera de avisos de los agentes", burbuja: "🍃" }, { texto: "Ordenando los avisos del día", burbuja: "📋" }) };
+    // Los sábados Tanuki también baja al mercadillo (si hay un aviso, la
+    // sección 7 sigue mandando: eso va primero).
+    return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: suSitio, ...alternar(p.numero, { texto: "A la espera de avisos de los agentes", burbuja: "🍃" }, { texto: "Ordenando los avisos del día", burbuja: "📋" }) };
   }
 
   // --- Los 5 agentes ---
@@ -336,9 +340,10 @@ function rutina(p, hora) {
   const trabajo = alternar(p.numero,
     { texto: p.datos.tarea,  burbuja: p.datos.burbujaTarea },
     { texto: p.datos.tarea2, burbuja: p.datos.burbujaTarea2 });
-  if (hora < 14) return { zona: puertaCasa, ...trabajo };
+  // Los sábados no se trabaja: mercadillo en la plaza (sección 14).
+  if (hora < 14) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...trabajo };
   if (hora < 16) return { zona: puertaDe(restaurante), texto: "Comiendo en el restaurante", burbuja: "🍙" };
-  if (hora < 20) return { zona: puertaCasa, ...trabajo };
+  if (hora < 20) return esMercadillo() ? comprandoEnElMercadillo(p) : { zona: puertaCasa, ...trabajo };
   return actividadDelBar(p.numero);
 }
 
@@ -1156,9 +1161,22 @@ const respuestasBar = [
 // Cierres cortos para cuando la charla tiene tercera frase.
 const cierresCharla = ["😂", "Jajaja", "Eso es.", "Totalmente.", "👏"];
 
+// Los sábados, en el mercadillo (sección 14), se habla de compras.
+const frasesMercadillo = [
+  "¿Has probado el queso del puesto de la esquina? De escándalo.",
+  "Los sábados el pueblo huele a pan recién hecho.",
+  "Mira qué tomates. Del huerto del alcalde, oiga.",
+  "He regateado la miel y me han echado del puesto con cariño.",
+  "El pescado de hoy es de la ría, fresquísimo.",
+  "Vine a por pan y llevo la cesta llena. Clásico.",
+];
+
 // A qué distancia (fracción del mapa) hay que estar para ponerse a charlar.
 // Los sitios de la izakaya están a ~0.10 y Tanuki a ~0.09 del alcalde.
 const DISTANCIA_CHARLA = 0.11;
+// Los sábados, en el mercadillo, los puestos vecinos están a ~0.19: se
+// charla de puesto a puesto (sección 14).
+const DISTANCIA_CHARLA_MERCADILLO = 0.20;
 
 // La charla en marcha, o null. { participantes, lineas, indice, ticks }
 let charla = null;
@@ -1186,7 +1204,8 @@ function buscarParejaParaCharla() {
     for (let j = i + 1; j < libres.length; j++) {
       const dx = libres[i].x - libres[j].x;
       const dy = libres[i].y - libres[j].y;
-      if (Math.sqrt(dx * dx + dy * dy) < DISTANCIA_CHARLA) parejas.push([libres[i], libres[j]]);
+      const distanciaMaxima = esMercadillo() ? DISTANCIA_CHARLA_MERCADILLO : DISTANCIA_CHARLA;
+      if (Math.sqrt(dx * dx + dy * dy) < distanciaMaxima) parejas.push([libres[i], libres[j]]);
     }
   }
   return parejas.length ? elegirAlAzar(parejas) : null;
@@ -1197,7 +1216,9 @@ function buscarParejaParaCharla() {
 function prepararCharla(a, b) {
   const hora = horaDelPueblo();
   const enElBar = hora >= HORA_BAR && hora < HORA_DORMIR;
-  const primera = enElBar ? elegirAlAzar(frasesBar) : elegirAlAzar(frasesCharla[claveCharla(a)]);
+  const primera = enElBar ? elegirAlAzar(frasesBar)
+    : esMercadillo() ? elegirAlAzar(frasesMercadillo)
+    : elegirAlAzar(frasesCharla[claveCharla(a)]);
   const segunda = enElBar && Math.random() < 0.5
     ? elegirAlAzar(respuestasBar)
     : elegirAlAzar(respuestasCharla[claveCharla(b)]);
@@ -1258,7 +1279,67 @@ function pasoDeCharla() {
 const intervaloCharlas = setInterval(pasoDeCharla, 1000);
 
 
-/* ---------- 14. ARRANQUE ---------- */
+/* ---------- 14. EL MERCADILLO DEL SÁBADO 🧺 ---------- */
+
+// Los sábados la plaza se llena de puestos y el pueblo cambia de planes:
+// nadie trabaja, todos bajan a hacer la compra y a cotillear entre puesto
+// y puesto. El día lo manda el reloj real (con el truco "#dia-6" se puede
+// simular un sábado para pruebas). La comida (14-16), la izakaya (20-23)
+// y dormir siguen igual: el mercadillo solo ocupa las horas de trabajo.
+
+// Los puestos: qué venden y en qué punto de la plaza están (en un anillo
+// alrededor de la fuente, igual que la plaza pero un poco más abierto).
+const puestos = [
+  { emoji: "🍎", nombre: "la frutería" },
+  { emoji: "🥖", nombre: "la panadería" },
+  { emoji: "🧀", nombre: "la quesería" },
+  { emoji: "🐟", nombre: "la pescadería" },
+  { emoji: "🌻", nombre: "la floristería" },
+  { emoji: "🍯", nombre: "la miel" },
+];
+for (const [indice, puesto] of puestos.entries()) {
+  const angulo = (indice / puestos.length) * 2 * Math.PI - Math.PI / 2;
+  puesto.x = plaza.x + Math.cos(angulo) * 0.185;
+  puesto.y = plaza.y + Math.sin(angulo) * 0.185;
+}
+
+// ¿Qué día de la semana es hoy en el pueblo? (0 = domingo ... 6 = sábado)
+function diaDeHoy() {
+  const diaTrucado = trucoConPrefijo("dia-");
+  return diaTrucado !== null ? parseInt(diaTrucado, 10) : new Date().getDay();
+}
+function esMercadillo() {
+  return diaDeHoy() === 6;
+}
+
+// El puesto que le toca a cada personaje (cada uno tiene su favorito).
+function suPuesto(p) {
+  return puestos[p.numero % puestos.length];
+}
+
+// Lo que hace un vecino en el mercadillo: curiosear junto a su puesto.
+function comprandoEnElMercadillo(p) {
+  return { zona: suPuesto(p), texto: "De compras en el mercadillo (" + suPuesto(p).nombre + ")", burbuja: "🧺" };
+}
+
+// Pinta los puestos en la plaza. Solo se llama si hoy es sábado.
+function crearPuestos() {
+  if (!esMercadillo()) return;
+  for (const puesto of puestos) {
+    const elemento = document.createElement("div");
+    elemento.className = "puesto";
+    elemento.textContent = puesto.emoji;
+    elemento.title = "Puesto de " + puesto.nombre;
+    colocar(elemento, puesto.x, puesto.y);
+    mapa.appendChild(elemento);
+  }
+}
+
+// Si hoy hay mercadillo, montamos los puestos.
+crearPuestos();
+
+
+/* ---------- 15. ARRANQUE ---------- */
 
 // Dibujamos el pueblo y ponemos los relojes en marcha.
 crearCaminos();
@@ -1320,6 +1401,7 @@ setInterval(pasoDelJuego, 50);
 // - "#directo" manda los avisos al buzón sin el paseo de Tanuki.
 // - "#charlas" hace que los vecinos charlen mucho más seguido (para pruebas).
 // - "#sincharlas" apaga las charlas por completo.
+// - "#dia-6" simula un sábado: sale el mercadillo con sus puestos (sección 14).
 if (trucos.has("buzon") || trucos.has("abrebuzon")) panelBuzon.classList.remove("oculta");
 if (trucos.has("ficha")) mostrarFicha("Tanuki");
 const trucoHora = trucoConPrefijo("h");
@@ -1328,4 +1410,4 @@ if (trucoHora !== null && Number.isFinite(parseFloat(trucoHora))) {
   horaSimulada = ((parseFloat(trucoHora) % 24) + 24) % 24;
   botonAvance.classList.add("activo");
   actualizarReloj();
-}
+  }
