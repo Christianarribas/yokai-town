@@ -14,6 +14,7 @@
     11. El mercadillo del sábado
     12. Los festivales yokai
     13. Las estaciones del año
+    14. Las misiones del Tanuki
    ================================================== */
 
 /* ---------- 1. GENERAL Y CABECERA ---------- */
@@ -709,4 +710,64 @@ body.de-noche {
 .clima-quieto .hoja-otono { animation: none; top: var(--altura-quieta); }
 @media (prefers-reduced-motion: reduce) {
   .hoja-otono { animation: none; top: var(--altura-quieta); }
+}
+
+
+/* ---------- 14. LAS MISIONES DEL TANUKI ---------- */
+
+/* Las misiones en el buzón (sección 17 de app.js): borde dorado para
+   que se distingan de los avisos normales. */
+.aviso-item.mision {
+  border-left: 4px solid #e8b34b;
+  background: #fffbe8;
+}
+.aviso-item.mision.cumplida {
+  border-left-color: #7cb356;
+  background: #f2f9ec;
+}
+.mision-hecha {
+  color: #4e7a35;
+  font-weight: 600;
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+.boton-mision {
+  margin-top: 8px;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 999px;
+  background: #e8b34b;
+  color: #4a3b1a;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #b98734;
+}
+.boton-mision:active { transform: translateY(1px); box-shadow: none; }
+
+/* El confeti de la celebración: cae sobre el pueblo durante un minuto. */
+.capa-confeti {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+.confeti {
+  position: absolute;
+  top: -6%;
+  font-size: 15px;
+  animation: caer-confeti var(--duracion) linear infinite;
+  animation-delay: var(--demora);
+  will-change: transform;
+}
+@keyframes caer-confeti {
+  from { transform: translate3d(0, -20px, 0) rotate(0deg); }
+  to { transform: translate3d(35px, 760px, 0) rotate(380deg); }
+}
+
+/* Menos movimiento: confeti quieto, conservando la fiesta. */
+.clima-quieto .confeti { animation: none; top: var(--altura-quieta); }
+@media (prefers-reduced-motion: reduce) {
+  .confeti { animation: none; top: var(--altura-quieta); }
 }
